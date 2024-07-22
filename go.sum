@@ -1,0 +1,4 @@
+github.com/oarkflow/browser v0.0.1 h1:B9hbyRgo6o55ct1lvqAjOFWCgXQ5zbbZDBeqbba3Zi8=
+github.com/oarkflow/browser v0.0.1/go.mod h1:veVj2saELmnUmzE7lXW6rL2JTfhDomCCSe0AQOL8LSY=
+golang.org/x/sys v0.22.0 h1:RI27ohtqKCnwULzJLqkv897zojh5/DwS/ENaMzUOaWI=
+golang.org/x/sys v0.22.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
