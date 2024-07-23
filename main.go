@@ -25,7 +25,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const Version = "mini server 0.1.7"
+const Version = "fs server 0.1.7"
 
 type File struct {
 	Name string
@@ -71,7 +71,7 @@ var imageTypes = []string{".png", ".jpg", "jpeg", ".gif"}
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "mini"
+	app.Name = "fs"
 	app.Usage = "Serve the given folder via an HTTP/S server"
 	app.Version = Version
 
@@ -253,7 +253,7 @@ func genKeys(host string) {
 	tmpl := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"mini"},
+			Organization: []string{"fs"},
 		},
 		NotBefore: notBefore,
 		NotAfter:  notBefore.Add(365 * 24 * time.Hour),
