@@ -101,6 +101,7 @@
     </div>
     {{ end }}
 
+    {{ if .Dirs }}
     <h1 class="text-lg font-semibold px-8 pt-4">Directory List</h1>
     <div class="masonry-dir">
         {{ range .Dirs }}
@@ -124,7 +125,8 @@
         </div>
         {{ end }}
     </div>
-
+    {{ end }}
+    {{ if .Images }}
     <h1 class="text-lg font-semibold px-8 pt-4">Image List</h1>
     <div class="masonry">
         {{ range .Images }}
@@ -156,7 +158,8 @@
         </div>
         {{ end }}
     </div>
-
+    {{ end }}
+    {{ if .Files }}
     <h1 class="text-lg font-semibold px-8 pt-4">File List</h1>
     <div class="masonry">
         {{ range .Files }}
@@ -187,6 +190,7 @@
         </div>
         {{ end }}
     </div>
+    {{ end }}
 </main>
 
 <script>

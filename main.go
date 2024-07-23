@@ -1,20 +1,12 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
 	"math"
-	"math/big"
 	"mime/multipart"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,12 +51,9 @@ type Context struct {
 }
 
 var (
-	CERT string
-	HOST string
-	KEY  string
-	PORT string
-	TLS  bool
-	PATH string
+	HOST  string
+	PORT  string
+	PATHS []string
 )
 
 var imageTypes = []string{".png", ".jpg", "jpeg", ".gif"}
@@ -72,66 +61,46 @@ var imageTypes = []string{".png", ".jpg", "jpeg", ".gif"}
 func main() {
 	app := cli.NewApp()
 	app.Name = "fs"
-	app.Usage = "Serve the given folder via an HTTP/S server"
+	app.Usage = "Serve the given folder via an HTTP server"
 	app.Version = Version
 
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{Name: "ip", Aliases: []string{"i"}, Value: "0.0.0.0", Usage: "IP address to serve on"},
 		&cli.StringFlag{Name: "port", Aliases: []string{"p"}, Value: "8080", Usage: "Port to listen on"},
-		&cli.BoolFlag{Name: "tls", Aliases: []string{"t"}, Usage: "Generate and use self-signed TLS cert/key"},
-		&cli.StringFlag{Name: "key", Aliases: []string{"k"}, Usage: "Use custom TLS Key, must also provide cert in PEM"},
-		&cli.StringFlag{Name: "cert", Aliases: []string{"c"}, Usage: "Use custom TLS Cert, must also provide key"},
 	}
 
 	app.Action = func(c *cli.Context) error {
 		HOST = c.String("ip")
 		PORT = c.String("port")
-		TLS = c.Bool("tls")
-		KEY = c.String("key")
-		CERT = c.String("cert")
 
 		if c.NArg() == 0 {
 			cli.ShowAppHelpAndExit(c, 1)
 		}
 
-		PATH = c.Args().Get(0)
-		if err := checkDir(PATH); err != nil {
-			log.Fatalf("%v", err)
-		}
-
-		checkPem(CERT, KEY)
-
-		var cert, key string
-		if TLS {
-			genKeys(HOST)
-			cert = "cert.pem"
-			key = "key.pem"
-		}
-
-		if len(CERT) > 0 && len(KEY) > 0 {
-			cert = CERT
-			key = KEY
+		PATHS = c.Args().Slice()
+		for _, path := range PATHS {
+			if err := checkDir(path); err != nil {
+				log.Fatalf("%v", err)
+			}
 		}
 
 		app := fiber.New()
+		app.Use(func(c *fiber.Ctx) error {
+			dir := c.Query("dir")
+			if dir != "" && !checkPath(PATHS, dir) {
+				return c.Redirect("/")
+			}
+			return c.Next()
+		})
 		setupRoutes(app)
 
 		url := fmt.Sprintf("%s:%s", HOST, PORT)
-		if len(cert) > 0 || TLS {
-			log.Printf("\nServing on: https://%s\n", url)
-			if !isSudo() {
-				_ = browser.OpenURL("https://" + url)
-			}
-			err := app.ListenTLS(url, cert, key)
-			log.Fatal(err)
-		} else {
-			log.Printf("\nServing on: http://%s\n", url)
-			if !isSudo() {
-				_ = browser.OpenURL("http://" + url)
-			}
-			err := app.Listen(url)
-			log.Fatal(err)
+		log.Printf("\nServing on: http://%s\n", url)
+		if !isSudo() {
+			_ = browser.OpenURL("http://" + url)
 		}
+		err := app.Listen(url)
+		log.Fatal(err)
 		return nil
 	}
 
@@ -150,7 +119,56 @@ func setupRoutes(app *fiber.App) {
 }
 
 func redirectRoot(c *fiber.Ctx) error {
-	return c.Redirect("/view?dir=/", fiber.StatusFound)
+	if len(PATHS) == 1 {
+		return c.Redirect("/view?dir="+PATHS[0], fiber.StatusFound)
+	}
+	return dashboard(c)
+}
+
+func dashboard(c *fiber.Ctx) error {
+	bt, err := os.ReadFile("homepage.html")
+	if err != nil {
+		return err
+	}
+	var f AllFiles
+	for _, dir := range PATHS {
+		dir = filepath.Clean(dir)
+		if dir == "" {
+			return c.Redirect("/", fiber.StatusFound)
+		}
+		dir = filepath.ToSlash(dir)
+		parent := filepath.Dir(dir)
+		if parent == "." {
+			parent = "/"
+		}
+		if strings.Contains(dir, "..") {
+			return c.Redirect("/", fiber.StatusFound)
+		}
+		path := filepath.Clean(dir) // Use the directory path from the query
+		if !exists(path) {
+			return c.Status(fiber.StatusNotFound).SendString("File Not Found")
+		}
+		entry, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			name := strings.TrimPrefix(path, "/")
+			size := humanSize(entry.Size())
+			mode := fmt.Sprintf("%v", entry.Mode())
+			date := fmt.Sprintf("%v", entry.ModTime().Format(time.RFC822))
+
+			file := File{Name: name, Size: size, Mode: mode, Date: date}
+			d := Dir{File: file, IsDir: true}
+			f.Dirs = append(f.Dirs, d)
+		}
+	}
+
+	title := "Directory listing for multiple paths"
+	context := Context{Title: title, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
+	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
+	templates := template.Must(template.New("foo").Parse(string(bt)))
+	return templates.Execute(c.Response().BodyWriter(), context)
 }
 
 func getFile(c *fiber.Ctx) error {
@@ -158,7 +176,7 @@ func getFile(c *fiber.Ctx) error {
 	if file == "" {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	path := filepath.Clean(filepath.Join(PATH, file))
+	path := filepath.Clean(file) // Directly use the file path
 	if !exists(path) {
 		return c.Status(fiber.StatusNotFound).SendString("File Not Found")
 	}
@@ -178,7 +196,7 @@ func uploadFiles(c *fiber.Ctx) error {
 		return c.Redirect("/", fiber.StatusFound)
 	}
 	for _, file := range files {
-		path := filepath.Clean(filepath.Join(PATH, dir, file.Filename))
+		path := filepath.Clean(filepath.Join(dir, file.Filename)) // Use the directory path from the form
 		src, err := file.Open()
 		if err != nil {
 			return err
@@ -200,7 +218,7 @@ func deleteFile(c *fiber.Ctx) error {
 		return c.Redirect("/", fiber.StatusFound)
 	}
 	dir := c.FormValue("directory")
-	path := filepath.Clean(filepath.Join(PATH, dir, filename))
+	path := filepath.Clean(filepath.Join(dir, filename)) // Use the directory path from the form
 	if !exists(path) {
 		return c.Status(fiber.StatusInternalServerError).SendString("File not found")
 	}
@@ -225,7 +243,7 @@ func viewDir(c *fiber.Ctx) error {
 	if strings.Contains(dir, "..") {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	path := filepath.Clean(filepath.Join(PATH, dir))
+	path := filepath.Clean(dir) // Use the directory path from the query
 	if !exists(path) {
 		return c.Status(fiber.StatusNotFound).SendString("File Not Found")
 	}
@@ -238,47 +256,6 @@ func viewDir(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
 	templates := template.Must(template.New("foo").Parse(string(bt)))
 	return templates.Execute(c.Response().BodyWriter(), context)
-}
-
-func checkPem(cert, key string) {
-	if (len(cert) > 0 && len(key) == 0) || (len(cert) == 0 && len(key) > 0) {
-		log.Fatal("Custom TLS cert/key requires both to be present")
-	}
-}
-
-func genKeys(host string) {
-	priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	notBefore := time.Now()
-	serialNumber, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	tmpl := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"fs"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notBefore.Add(365 * 24 * time.Hour),
-		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-		},
-		BasicConstraintsValid: true,
-	}
-	hosts := strings.Split(host, ",")
-	for _, h := range hosts {
-		if ip := net.ParseIP(h); ip != nil {
-			tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
-		} else {
-			tmpl.DNSNames = append(tmpl.DNSNames, h)
-		}
-	}
-	derBytes, _ := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
-	certOut, _ := os.Create("cert.pem")
-	defer certOut.Close()
-	_ = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	keyOut, _ := os.Create("key.pem")
-	defer keyOut.Close()
-	privBytes, _ := x509.MarshalECPrivateKey(priv)
-	_ = pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privBytes})
 }
 
 func checkDir(dir string) error {
@@ -357,4 +334,21 @@ func humanSize(s int64) string {
 
 func isSudo() bool {
 	return os.Geteuid() == 0
+}
+
+func checkPath(baseDirs []string, path string) bool {
+	path = filepath.Clean(path)
+	for _, baseDir := range baseDirs {
+		baseDir = filepath.Clean(baseDir)
+		if strings.HasPrefix(path, baseDir) {
+			relPath, err := filepath.Rel(baseDir, path)
+			if err != nil {
+				continue
+			}
+			if !strings.Contains(relPath, "..") {
+				return true
+			}
+		}
+	}
+	return false
 }
