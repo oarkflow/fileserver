@@ -1,3 +1,20 @@
+<script src="/js/viewer.min.js"></script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const viewerImages = document.querySelectorAll('.viewer-image');
+    viewerImages.forEach(image => {
+      new Viewer(image, {
+        inline: false,
+        viewed() {
+          if (viewer) {
+            viewer.zoomTo(1);
+          }
+        }
+      });
+    });
+  });
+</script>
 <div class="p-4">
   {{ if ne .Directory "/" }}
   <div class="mb-4">

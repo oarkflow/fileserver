@@ -1,14 +1,14 @@
-<div class="p-4">
-    <h1 class="text-lg font-semibold px-8 pt-4">Directory List</h1>
-    <div class="masonry-dir">
+<main class="container">
+    <h1 class="h1">Directory List</h1>
+    <div class="grid">
         {{ range .Dirs }}
-        <div class="brick bg-white overflow-hidden break-all">
-            <div class="relative">
-                <div class="mb-4 flex align-middle items-center gap-2  w-5/6">
+        <div class="card" style="overflow: hidden; word-break: break-all;">
+            <div style="position: relative;">
+                <div class="d-flex align-items-center gap-2" style="margin-bottom: 1rem; width: 83.333%;">
                     <i class="fas fa-folder"></i>
-                    <a href="/view?dir={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}/" class="text-blue-500 hover:text-blue-700 font-bold">{{ .Name }}/</a>
+                    <a href="/view?dir={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}/" class="text-primary font-bold">{{ .Name }}/</a>
                 </div>
-                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
+                <div class="text-secondary small d-flex justify-content-between" style="padding-top: 2.5rem;">
                     <p>{{ .Size }}</p>
                     <p>{{ .Mode }}</p>
                     <p>{{ .Date }}</p>
@@ -17,4 +17,4 @@
         </div>
         {{ end }}
     </div>
-</div>
+</main>

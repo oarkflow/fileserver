@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="/css/pico.vendor.css" />
     <link rel="stylesheet" href="/css/pico.colors.css" />
     <link href="/css/viewer.min.css" rel="stylesheet">
-    <script src="/js/viewer.min.js"></script>
     <script type="module">
         import * as hotwiredTurbo from '/js/turbo.vendor.js';
         window.hotwiredTurbo = hotwiredTurbo
@@ -25,22 +24,5 @@
     {{end}}
 {{ embed }}
 </main>
-
-
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const viewerImages = document.querySelectorAll('.viewer-image');
-        viewerImages.forEach(image => {
-            new Viewer(image, {
-                inline: false,
-                viewed() {
-                    if (viewer) {
-                        viewer.zoomTo(1);
-                    }
-                }
-            });
-        });
-    });
-</script>
 </body>
 </html>
