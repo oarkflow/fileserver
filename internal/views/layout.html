@@ -25,5 +25,22 @@
     {{end}}
 {{ embed }}
 </main>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const viewerImages = document.querySelectorAll('.viewer-image');
+        viewerImages.forEach(image => {
+            new Viewer(image, {
+                inline: false,
+                viewed() {
+                    if (viewer) {
+                        viewer.zoomTo(1);
+                    }
+                }
+            });
+        });
+    });
+</script>
 </body>
 </html>

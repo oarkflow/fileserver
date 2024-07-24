@@ -1,4 +1,4 @@
-<main class="p-4">
+<div class="p-4">
   {{ if ne .Directory "/" }}
   <div class="mb-4">
     <a href="/view?dir={{ .Parent }}" class="text-blue-500 hover:text-blue-700">To Parent Directory</a>
@@ -81,19 +81,3 @@
   </div>
   {{ end }}
 </main>
-
-<script>
-  document.addEventListener("DOMContentLoaded", function() {
-    const viewerImages = document.querySelectorAll('.viewer-image');
-    viewerImages.forEach(image => {
-      new Viewer(image, {
-        inline: false,
-        viewed() {
-          if (viewer) {
-            viewer.zoomTo(1);
-          }
-        }
-      });
-    });
-  });
-</script>
