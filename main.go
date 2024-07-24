@@ -51,9 +51,8 @@ type Context struct {
 }
 
 var (
-	HOST  string
-	PORT  string
-	PATHS []string
+	HOST, PORT string
+	PATHS      []string
 )
 
 var imageTypes = []string{".png", ".jpg", "jpeg", ".gif"}
@@ -70,8 +69,7 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		HOST = c.String("ip")
-		PORT = c.String("port")
+		HOST, PORT = c.String("ip"), c.String("port")
 
 		if c.NArg() == 0 {
 			cli.ShowAppHelpAndExit(c, 1)
@@ -84,16 +82,11 @@ func main() {
 			}
 		}
 		engine := html.New("./views", ".html")
+		engine.ShouldReload = true
 		app := fiber.New(fiber.Config{
 			Views: engine,
 		})
-		app.Use(func(c *fiber.Ctx) error {
-			dir := c.Query("dir")
-			if dir != "" && !checkPath(PATHS, dir) {
-				return c.Redirect("/")
-			}
-			return c.Next()
-		})
+		app.Use(redirectInvalidDir)
 		setupRoutes(app)
 
 		url := fmt.Sprintf("%s:%s", HOST, PORT)
@@ -101,15 +94,11 @@ func main() {
 		if !isSudo() {
 			_ = browser.OpenURL("http://" + url)
 		}
-		err := app.Listen(url)
-		log.Fatal(err)
+		log.Fatal(app.Listen(url))
 		return nil
 	}
 
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(app.Run(os.Args))
 }
 
 func setupRoutes(app *fiber.App) {
@@ -122,63 +111,49 @@ func setupRoutes(app *fiber.App) {
 
 func redirectRoot(c *fiber.Ctx) error {
 	if len(PATHS) == 1 {
-		return c.Redirect("/view?dir="+PATHS[0], fiber.StatusFound)
+		return c.Redirect("/view?dir=" + PATHS[0])
 	}
 	return dashboard(c)
 }
 
 func dashboard(c *fiber.Ctx) error {
-	var f AllFiles
+	var allFiles AllFiles
 	for _, dir := range PATHS {
 		dir = filepath.Clean(dir)
-		if dir == "" {
+		if dir == "" || strings.Contains(dir, "..") || !exists(dir) {
 			return c.Redirect("/", fiber.StatusFound)
 		}
-		dir = filepath.ToSlash(dir)
-		parent := filepath.Dir(dir)
-		if parent == "." {
-			parent = "/"
-		}
-		if strings.Contains(dir, "..") {
-			return c.Redirect("/", fiber.StatusFound)
-		}
-		path := filepath.Clean(dir) // Use the directory path from the query
-		if !exists(path) {
-			return c.Status(fiber.StatusNotFound).SendString("File Not Found")
-		}
-		entry, err := os.Stat(path)
+		entry, err := os.Stat(dir)
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			name := strings.TrimPrefix(path, "/")
-			size := humanSize(entry.Size())
-			mode := fmt.Sprintf("%v", entry.Mode())
-			date := fmt.Sprintf("%v", entry.ModTime().Format(time.RFC822))
-
-			file := File{Name: name, Size: size, Mode: mode, Date: date}
-			d := Dir{File: file, IsDir: true}
-			f.Dirs = append(f.Dirs, d)
+			allFiles.Dirs = append(allFiles.Dirs, Dir{
+				File: File{
+					Name: filepath.ToSlash(strings.TrimPrefix(dir, "/")),
+					Size: humanSize(entry.Size()),
+					Mode: fmt.Sprintf("%v", entry.Mode()),
+					Date: entry.ModTime().Format(time.RFC822),
+				},
+				IsDir: true,
+			})
 		}
 	}
 
-	title := "Directory listing for multiple paths"
-	context := Context{Title: title, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
+	context := Context{
+		Title: "Directory listing for multiple paths",
+		Dirs:  allFiles.Dirs,
+	}
 	return c.Render("home-page", context)
 }
 
 func getFile(c *fiber.Ctx) error {
-	file := c.Query("file")
-	if file == "" {
+	file := filepath.Clean(c.Query("file"))
+	if file == "" || !exists(file) {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	path := filepath.Clean(file) // Directly use the file path
-	if !exists(path) {
-		return c.Status(fiber.StatusNotFound).SendString("File Not Found")
-	}
-	filename := filepath.Base(path)
-	c.Set("Content-Disposition", "attachment; filename="+filename)
-	return c.SendFile(path)
+	c.Set("Content-Disposition", "attachment; filename="+filepath.Base(file))
+	return c.SendFile(file)
 }
 
 func uploadFiles(c *fiber.Ctx) error {
@@ -186,74 +161,50 @@ func uploadFiles(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	files := form.File["file-upload"]
 	dir := filepath.Clean(c.FormValue("directory"))
 	if strings.Contains(dir, "..") {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	for _, file := range files {
-		path := filepath.Clean(filepath.Join(dir, file.Filename)) // Use the directory path from the form
-		src, err := file.Open()
-		if err != nil {
-			return err
-		}
-		defer src.Close()
-		if err := copyUploadFile(path, src); err != nil {
+	for _, file := range form.File["file-upload"] {
+		if err := saveUploadedFile(filepath.Join(dir, file.Filename), file); err != nil {
 			return err
 		}
 	}
-	return c.Redirect("/view?dir="+dir, fiber.StatusFound)
+	return c.Redirect("/view?dir=" + dir)
 }
 
 func deleteFile(c *fiber.Ctx) error {
-	filename := c.FormValue("filename")
-	if filename == "" {
-		return c.Status(fiber.StatusInternalServerError).SendString("missing form value")
-	}
-	if strings.Contains(filename, "..") {
-		return c.Redirect("/", fiber.StatusFound)
-	}
-	dir := c.FormValue("directory")
-	path := filepath.Clean(filepath.Join(dir, filename)) // Use the directory path from the form
-	if !exists(path) {
+	filename := filepath.Join(filepath.Clean(c.FormValue("directory")), c.FormValue("filename"))
+	if filename == "" || strings.Contains(filename, "..") || !exists(filename) {
 		return c.Status(fiber.StatusInternalServerError).SendString("File not found")
 	}
-	_ = os.Remove(path)
-	return c.Redirect("/view?dir="+dir, fiber.StatusFound)
+	os.Remove(filename)
+	return c.Redirect("/view?dir=" + filepath.Dir(filename))
 }
 
 func viewDir(c *fiber.Ctx) error {
 	dir := filepath.Clean(c.Query("dir"))
-	if dir == "" {
+	if dir == "" || strings.Contains(dir, "..") || !exists(dir) {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	dir = filepath.ToSlash(dir)
-	parent := filepath.Dir(dir)
-	if parent == "." {
-		parent = "/"
-	}
-	if strings.Contains(dir, "..") {
-		return c.Redirect("/", fiber.StatusFound)
-	}
-	path := filepath.Clean(dir) // Use the directory path from the query
-	if !exists(path) {
-		return c.Status(fiber.StatusNotFound).SendString("File Not Found")
-	}
-	f, err := fileFunc(path)
+	allFiles, err := getAllFiles(dir)
 	if err != nil {
 		return err
 	}
-	title := "Directory listing for " + dir
-	context := Context{Title: title, Directory: dir, Parent: parent, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
+	context := Context{
+		Title:     "Directory listing for " + dir,
+		Directory: dir,
+		Parent:    filepath.Dir(dir),
+		Files:     allFiles.Files,
+		Dirs:      allFiles.Dirs,
+		Images:    allFiles.Images,
+	}
 	return c.Render("index", context)
 }
 
 func checkDir(dir string) error {
 	stat, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-	if !stat.IsDir() {
+	if err != nil || !stat.IsDir() {
 		return fmt.Errorf("%s is not a directory", dir)
 	}
 	return nil
@@ -264,7 +215,12 @@ func exists(path string) bool {
 	return err == nil
 }
 
-func copyUploadFile(path string, src multipart.File) error {
+func saveUploadedFile(path string, file *multipart.FileHeader) error {
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
 	dst, err := os.Create(path)
 	if err != nil {
 		return err
@@ -274,36 +230,33 @@ func copyUploadFile(path string, src multipart.File) error {
 	return err
 }
 
-func fileFunc(dir string) (AllFiles, error) {
-	var a AllFiles
+func getAllFiles(dir string) (AllFiles, error) {
+	var allFiles AllFiles
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return a, err
+		return allFiles, err
 	}
 	for _, entry := range files {
 		fi, _ := entry.Info()
-		name := entry.Name()
-		size := humanSize(fi.Size())
-		mode := fmt.Sprintf("%v", fi.Mode())
-		date := fmt.Sprintf("%v", fi.ModTime().Format(time.RFC822))
-
-		f := File{Name: name, Size: size, Mode: mode, Date: date}
-
-		if isImage(name) {
-			img := Image{File: f}
-			a.Images = append(a.Images, img)
+		file := File{
+			Name: entry.Name(),
+			Size: humanSize(fi.Size()),
+			Mode: fmt.Sprintf("%v", fi.Mode()),
+			Date: fi.ModTime().Format(time.RFC822),
+		}
+		if isImage(entry.Name()) {
+			allFiles.Images = append(allFiles.Images, Image{File: file})
 		} else if fi.IsDir() {
-			d := Dir{File: f, IsDir: true}
-			a.Dirs = append(a.Dirs, d)
+			allFiles.Dirs = append(allFiles.Dirs, Dir{File: file, IsDir: true})
 		} else {
-			a.Files = append(a.Files, f)
+			allFiles.Files = append(allFiles.Files, file)
 		}
 	}
-	return a, nil
+	return allFiles, nil
 }
 
-func isImage(fn string) bool {
-	ext := strings.ToLower(filepath.Ext(fn))
+func isImage(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
 	for _, imgType := range imageTypes {
 		if ext == imgType {
 			return true
@@ -312,18 +265,25 @@ func isImage(fn string) bool {
 	return false
 }
 
-func humanSize(s int64) string {
-	if s == 0 {
+func humanSize(size int64) string {
+	if size == 0 {
 		return "0"
 	}
 	sizes := []string{"B", "K", "M", "G"}
-	i := math.Floor(math.Log(float64(s)) / math.Log(1024))
-	human := float64(s) / math.Pow(1024, i)
-	return fmt.Sprintf("%0.1f %s", human, sizes[int(i)])
+	i := int(math.Floor(math.Log(float64(size)) / math.Log(1024)))
+	return fmt.Sprintf("%.1f %s", float64(size)/math.Pow(1024, float64(i)), sizes[i])
 }
 
 func isSudo() bool {
 	return os.Geteuid() == 0
+}
+
+func redirectInvalidDir(c *fiber.Ctx) error {
+	dir := c.Query("dir")
+	if dir != "" && !checkPath(PATHS, dir) {
+		return c.Redirect("/")
+	}
+	return c.Next()
 }
 
 func checkPath(baseDirs []string, path string) bool {
@@ -331,11 +291,7 @@ func checkPath(baseDirs []string, path string) bool {
 	for _, baseDir := range baseDirs {
 		baseDir = filepath.Clean(baseDir)
 		if strings.HasPrefix(path, baseDir) {
-			relPath, err := filepath.Rel(baseDir, path)
-			if err != nil {
-				continue
-			}
-			if !strings.Contains(relPath, "..") {
+			if relPath, err := filepath.Rel(baseDir, path); err == nil && !strings.Contains(relPath, "..") {
 				return true
 			}
 		}
