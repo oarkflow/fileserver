@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"math"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
 	"github.com/oarkflow/browser"
 	"github.com/urfave/cli/v2"
 )
@@ -83,8 +83,10 @@ func main() {
 				log.Fatalf("%v", err)
 			}
 		}
-
-		app := fiber.New()
+		engine := html.New("./views", ".html")
+		app := fiber.New(fiber.Config{
+			Views: engine,
+		})
 		app.Use(func(c *fiber.Ctx) error {
 			dir := c.Query("dir")
 			if dir != "" && !checkPath(PATHS, dir) {
@@ -126,10 +128,6 @@ func redirectRoot(c *fiber.Ctx) error {
 }
 
 func dashboard(c *fiber.Ctx) error {
-	bt, err := os.ReadFile("homepage.html")
-	if err != nil {
-		return err
-	}
 	var f AllFiles
 	for _, dir := range PATHS {
 		dir = filepath.Clean(dir)
@@ -166,9 +164,7 @@ func dashboard(c *fiber.Ctx) error {
 
 	title := "Directory listing for multiple paths"
 	context := Context{Title: title, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
-	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
-	templates := template.Must(template.New("foo").Parse(string(bt)))
-	return templates.Execute(c.Response().BodyWriter(), context)
+	return c.Render("homepage", context)
 }
 
 func getFile(c *fiber.Ctx) error {
@@ -227,10 +223,6 @@ func deleteFile(c *fiber.Ctx) error {
 }
 
 func viewDir(c *fiber.Ctx) error {
-	bt, err := os.ReadFile("index.html")
-	if err != nil {
-		return err
-	}
 	dir := filepath.Clean(c.Query("dir"))
 	if dir == "" {
 		return c.Redirect("/", fiber.StatusFound)
@@ -253,9 +245,7 @@ func viewDir(c *fiber.Ctx) error {
 	}
 	title := "Directory listing for " + dir
 	context := Context{Title: title, Directory: dir, Parent: parent, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
-	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
-	templates := template.Must(template.New("foo").Parse(string(bt)))
-	return templates.Execute(c.Response().BodyWriter(), context)
+	return c.Render("index", context)
 }
 
 func checkDir(dir string) error {
