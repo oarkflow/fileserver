@@ -164,7 +164,7 @@ func dashboard(c *fiber.Ctx) error {
 
 	title := "Directory listing for multiple paths"
 	context := Context{Title: title, Files: f.Files, Dirs: f.Dirs, Images: f.Images}
-	return c.Render("homepage", context)
+	return c.Render("home-page", context)
 }
 
 func getFile(c *fiber.Ctx) error {
