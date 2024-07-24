@@ -1,1 +1,6 @@
+# Git Ignore for Golang Fiber App
+tmp/
+.env*
+*.db
 .idea
+*.fiber.gz
