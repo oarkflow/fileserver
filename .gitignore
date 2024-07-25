@@ -1,1 +1,5 @@
 .idea
+*.fiber.gz
+*.db
+*.zip
+static/viewerjs/assets

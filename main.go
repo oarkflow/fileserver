@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/template/html/v2"
 	"github.com/oarkflow/browser"
 	"github.com/urfave/cli/v2"
@@ -86,6 +87,15 @@ func main() {
 		app := fiber.New(fiber.Config{
 			Views: engine,
 		})
+		app.Use(cors.New())
+		app.Static("/static", "./static", fiber.Static{
+			Compress:  true,
+			ByteRange: true,
+		})
+		app.Static("/webfonts", "./webfonts", fiber.Static{
+			Compress:  true,
+			ByteRange: true,
+		})
 		app.Use(redirectInvalidDir)
 		setupRoutes(app)
 
@@ -106,7 +116,7 @@ func setupRoutes(app *fiber.App) {
 	app.Get("/get", getFile)
 	app.Post("/upload", uploadFiles)
 	app.Get("/view", viewDir)
-	app.Post("/delete", deleteFile)
+	// app.Post("/delete", deleteFile)
 }
 
 func redirectRoot(c *fiber.Ctx) error {
@@ -152,7 +162,7 @@ func getFile(c *fiber.Ctx) error {
 	if file == "" || !exists(file) {
 		return c.Redirect("/", fiber.StatusFound)
 	}
-	c.Set("Content-Disposition", "attachment; filename="+filepath.Base(file))
+	// c.Set("Content-Disposition", "attachment; filename="+filepath.Base(file))
 	return c.SendFile(file)
 }
 
@@ -173,14 +183,14 @@ func uploadFiles(c *fiber.Ctx) error {
 	return c.Redirect("/view?dir=" + dir)
 }
 
-func deleteFile(c *fiber.Ctx) error {
+/*func deleteFile(c *fiber.Ctx) error {
 	filename := filepath.Join(filepath.Clean(c.FormValue("directory")), c.FormValue("filename"))
 	if filename == "" || strings.Contains(filename, "..") || !exists(filename) {
 		return c.Status(fiber.StatusInternalServerError).SendString("File not found")
 	}
 	os.Remove(filename)
 	return c.Redirect("/view?dir=" + filepath.Dir(filename))
-}
+}*/
 
 func viewDir(c *fiber.Ctx) error {
 	dir := filepath.Clean(c.Query("dir"))
