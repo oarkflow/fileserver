@@ -698,7 +698,7 @@ function Viewer( viewerPlugin, parameters ) {
                     supportsFileExtension: function ( extension ) {
                         return (odfFileExtensions.indexOf(extension) !== -1);
                     },
-                    path:                  "./ODFViewerPlugin",
+                    path:                  "./ODFViewerPlugin/index.js",
                     getClass:              function () {
                         return ODFViewerPlugin;
                     }
@@ -711,7 +711,7 @@ function Viewer( viewerPlugin, parameters ) {
                 supportsFileExtension: function ( extension ) {
                     return (extension === 'pdf' || extension === 'ai');
                 },
-                path:                  "./PDFViewerPlugin",
+                path:                  "./PDFViewerPlugin/index.js",
                 getClass:              function () {
                     return PDFViewerPlugin;
                 }
@@ -723,7 +723,7 @@ function Viewer( viewerPlugin, parameters ) {
                 supportsFileExtension: function ( extension ) {
                     return (extension === 'html');
                 },
-                path:                  "./HTMLViewerPlugin",
+                path:                  "./HTMLViewerPlugin/index.js",
                 getClass:              function () {
                     return HTMLViewerPlugin;
                 }
@@ -735,7 +735,7 @@ function Viewer( viewerPlugin, parameters ) {
                 supportsFileExtension: function ( extension ) {
                     return (extension === 'txt' || extension === 'json');
                 },
-                path:                  "./TextViewerPlugin",
+                path:                  "./TextViewerPlugin/index.js",
                 getClass:              function () {
                     return TextViewerPlugin;
                 }
@@ -805,7 +805,7 @@ function Viewer( viewerPlugin, parameters ) {
                     supportsFileExtension: function ( extension ) {
                         return (multimediaFileExtensions.indexOf(extension) !== -1);
                     },
-                    path:                  "./MultimediaViewerPlugin",
+                    path:                  "./MultimediaViewerPlugin/index.js",
                     getClass:              function () {
                         return MultimediaViewerPlugin;
                     }
@@ -819,7 +819,7 @@ function Viewer( viewerPlugin, parameters ) {
             supportsFileExtension: function () {
                 return true;
             },
-            path:                  "./UnknownFilePlugin",
+            path:                  "./UnknownFilePlugin/index.js",
             getClass:              function () {
                 return UnknownFilePlugin;
             }

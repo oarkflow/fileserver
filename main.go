@@ -56,7 +56,7 @@ var (
 	PATHS      []string
 )
 
-var imageTypes = []string{".png", ".jpg", "jpeg", ".gif"}
+var imageTypes = []string{".png", ".jpg", "jpeg", ".gif", ".svg"}
 
 func main() {
 	app := cli.NewApp()
@@ -116,7 +116,7 @@ func setupRoutes(app *fiber.App) {
 	app.Get("/get", getFile)
 	app.Post("/upload", uploadFiles)
 	app.Get("/view", viewDir)
-	// app.Post("/delete", deleteFile)
+	app.Post("/delete", deleteFile)
 }
 
 func redirectRoot(c *fiber.Ctx) error {
@@ -183,14 +183,14 @@ func uploadFiles(c *fiber.Ctx) error {
 	return c.Redirect("/view?dir=" + dir)
 }
 
-/*func deleteFile(c *fiber.Ctx) error {
+func deleteFile(c *fiber.Ctx) error {
 	filename := filepath.Join(filepath.Clean(c.FormValue("directory")), c.FormValue("filename"))
 	if filename == "" || strings.Contains(filename, "..") || !exists(filename) {
 		return c.Status(fiber.StatusInternalServerError).SendString("File not found")
 	}
 	os.Remove(filename)
 	return c.Redirect("/view?dir=" + filepath.Dir(filename))
-}*/
+}
 
 func viewDir(c *fiber.Ctx) error {
 	dir := filepath.Clean(c.Query("dir"))
