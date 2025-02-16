@@ -73,6 +73,20 @@
         .toast.show {
             opacity: 1;
         }
+        /* Simple tab styling */
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            border-b-2: solid;
+            cursor: pointer;
+        }
+        .tab-active {
+            border-bottom: 2px solid #2563eb; /* blue-600 */
+            color: #2563eb;
+        }
+        .tab-inactive {
+            border-bottom: 2px solid transparent;
+            color: #4b5563; /* gray-600 */
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -90,7 +104,7 @@
 
 <!-- Main content container -->
 <main class="p-4">
-    <div class="mb-6 flex gap-2 items-center">
+    <div class="mb-6 flex flex-wrap gap-2 items-center">
         <!-- Upload Form -->
         <div>
             <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-lg rounded-lg p-4">
@@ -98,11 +112,9 @@
                     <legend class="text-xl font-semibold mb-2">Upload File(s) or Folder(s)</legend>
                     <input type="hidden" name="base" value="{{ .BaseIndex }}">
                     <input type="hidden" name="directory" value="{{ .Directory }}">
-
                     <!-- Updated input to track folder structure -->
                     <input type="file" id="fileInput" name="file-upload" multiple webkitdirectory directory class="mb-2 w-full border p-2 rounded">
                     <input type="hidden" id="fullPathsInput" name="full-paths[]" />
-
                     <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
                         Upload
                     </button>
@@ -135,38 +147,100 @@
     </div>
     {{ end }}
 
-    <!-- Directories Section -->
-    {{ if .Dirs }}
-    <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
-    <!-- Directory Filter -->
+    <!-- Global Filter -->
     <div class="px-4 mb-4">
-        <input type="text" id="dirFilter" placeholder="Filter directories by name" class="border p-2 rounded w-full">
+        <input type="text" id="globalFilter" placeholder="Global filter by name" class="border p-2 rounded w-full">
     </div>
-    <div id="directoriesContainer" class="masonry-dir">
-        {{ range .Dirs }}
-        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg" data-name="{{ .Name }}">
-            <div class="flex items-center gap-3 mb-2">
-                <i class="fas fa-folder text-2xl text-yellow-500"></i>
-                <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:underline font-semibold text-lg">
-                {{ .Name }}/
+
+    <!-- Tabs Navigation -->
+    <div class="px-4 mb-4 flex space-x-4">
+        <button id="tab-btn-dirs" class="tab-btn tab-active" onclick="showTab('dirs')">Directories</button>
+        <button id="tab-btn-imgs" class="tab-btn tab-inactive" onclick="showTab('imgs')">Images</button>
+        <button id="tab-btn-files" class="tab-btn tab-inactive" onclick="showTab('files')">Files</button>
+    </div>
+
+    <!-- Tab Contents -->
+    <!-- Directories Tab -->
+    <div id="tab-content-dirs">
+        {{ if .Dirs }}
+        <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
+        <!-- Directory Filter (category-specific) -->
+        <div class="px-4 mb-4">
+            <input type="text" id="dirFilter" placeholder="Filter directories by name" class="border p-2 rounded w-full">
+        </div>
+        <div id="directoriesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+            {{ range .Dirs }}
+            <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg" data-name="{{ .Name }}">
+                <div class="flex items-center gap-3 mb-2">
+                    <i class="fas fa-folder text-2xl text-yellow-500"></i>
+                    <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:underline font-semibold text-lg">
+                    {{ .Name }}/
+                    </a>
+                </div>
+                <div class="text-gray-500 text-sm flex justify-between">
+                    <p>{{ .Size }}</p>
+                    <p>{{ .Mode }}</p>
+                    <p>{{ .Date }}</p>
+                </div>
+                <!-- Rename & Delete for directories -->
+                <div class="mt-3 flex items-center gap-2">
+                    <form action="/rename" method="POST" onsubmit="return confirmRename(this)" class="flex items-center gap-1">
+                        <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                        <input type="hidden" name="oldPath" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                        <input type="text" name="newName" placeholder="Rename" class="border rounded p-1 text-sm">
+                        <button type="submit" class="text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </form>
+                    <form action="/delete" method="POST" onsubmit="return confirmDelete('directory')" class="inline">
+                        <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                        <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                        <button type="submit" class="text-red-600 hover:text-red-800">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {{ end }}
+        </div>
+        {{ end }}
+    </div>
+
+    <!-- Images Tab -->
+    <div id="tab-content-imgs" class="hidden">
+        {{ if .Images }}
+        <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
+        <!-- Image Filter (category-specific) -->
+        <div class="px-4 mb-4 flex gap-2">
+            <input type="text" id="imgFilter" placeholder="Filter images by name" class="border p-2 rounded flex-1">
+            <select id="imgTypeFilter" class="border p-2 rounded">
+                <option value="">All Types</option>
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="gif">GIF</option>
+                <option value="svg">SVG</option>
+            </select>
+        </div>
+        <div id="imagesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+            {{ range .Images }}
+            <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+            <div class="mb-1 w-full h-full relative">
+                <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
+                <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
+                <div class="mt-2">
+                    <div class="text-gray-500 text-sm flex justify-between">
+                        <p>{{ .Size }}</p>
+                        <p>{{ .Mode }}</p>
+                        <p>{{ .Date }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-download"></i>
                 </a>
-            </div>
-            <div class="text-gray-500 text-sm flex justify-between">
-                <p>{{ .Size }}</p>
-                <p>{{ .Mode }}</p>
-                <p>{{ .Date }}</p>
-            </div>
-            <!-- Rename & Delete for directories -->
-            <div class="mt-3 flex items-center gap-2">
-                <form action="/rename" method="POST" onsubmit="return confirmRename(this)" class="flex items-center gap-1">
-                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
-                    <input type="hidden" name="oldPath" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                    <input type="text" name="newName" placeholder="Rename" class="border rounded p-1 text-sm">
-                    <button type="submit" class="text-blue-600 hover:text-blue-800">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </form>
-                <form action="/delete" method="POST" onsubmit="return confirmDelete('directory')" class="inline">
+                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
                     <input type="hidden" name="base" value="{{ $.BaseIndex }}">
                     <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
                     <button type="submit" class="text-red-600 hover:text-red-800">
@@ -178,103 +252,62 @@
         {{ end }}
     </div>
     {{ end }}
+    </div>
 
-    <!-- Images Section -->
-    {{ if .Images }}
-    <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
-    <!-- Image Filter -->
-    <div class="px-4 mb-4 flex gap-2">
-        <input type="text" id="imgFilter" placeholder="Filter images by name" class="border p-2 rounded flex-1">
-        <select id="imgTypeFilter" class="border p-2 rounded">
-            <option value="">All Types</option>
-            <option value="png">PNG</option>
-            <option value="jpg">JPG</option>
-            <option value="jpeg">JPEG</option>
-            <option value="gif">GIF</option>
-            <option value="svg">SVG</option>
-        </select>
-    </div>
-    <div id="imagesContainer" class="masonry">
-        {{ range .Images }}
-        <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
-        <div class="mb-3 w-full h-full relative">
-            <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
-            <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
+    <!-- Files Tab -->
+    <div id="tab-content-files" class="hidden">
+        {{ if .Files }}
+        <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
+        <!-- File Filter (category-specific) -->
+        <div class="px-4 mb-4 flex gap-2">
+            <input type="text" id="fileFilter" placeholder="Filter files by name" class="border p-2 rounded flex-1">
+            <select id="fileTypeFilter" class="border p-2 rounded">
+                <option value="">All Types</option>
+                <!-- Options will be populated dynamically -->
+            </select>
         </div>
-        <div class="text-gray-500 text-sm flex justify-between">
-            <p>{{ .Size }}</p>
-            <p>{{ .Mode }}</p>
-            <p>{{ .Date }}</p>
-        </div>
-        <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
-            <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
-            <i class="fas fa-download"></i>
-            </a>
-            <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
-                <input type="hidden" name="base" value="{{ $.BaseIndex }}">
-                <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                <button type="submit" class="text-red-600 hover:text-red-800">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </form>
-        </div>
-    </div>
-    {{ end }}
-    </div>
-    {{ end }}
-
-    <!-- Files Section -->
-    {{ if .Files }}
-    <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
-    <!-- File Filter -->
-    <div class="px-4 mb-4 flex gap-2">
-        <input type="text" id="fileFilter" placeholder="Filter files by name" class="border p-2 rounded flex-1">
-        <select id="fileTypeFilter" class="border p-2 rounded">
-            <option value="">All Types</option>
-            <!-- Options will be populated dynamically -->
-        </select>
-    </div>
-    <div id="filesContainer" class="masonry">
-        {{ range .Files }}
-        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
-        <div class="flex flex-col gap-2 mb-2">
-            <div class="flex items-center gap-3">
-                <i class="fas fa-file text-2xl text-gray-600"></i>
-                <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
+        <div id="filesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+            {{ range .Files }}
+            <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+            <div class="flex flex-col gap-2 mb-2">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-file text-2xl text-gray-600"></i>
+                    <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
+                </div>
+            </div>
+            <div class="text-gray-500 text-sm flex justify-between">
+                <p>{{ .Size }}</p>
+                <p>{{ .Mode }}</p>
+                <p>{{ .Date }}</p>
+            </div>
+            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+                <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-edit"></i>
+                </a>
+                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-download"></i>
+                </a>
+                <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
+                <i class="fas fa-eye"></i>
+                </a>
+                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
+                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                    <button type="submit" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
             </div>
         </div>
-        <div class="text-gray-500 text-sm flex justify-between">
-            <p>{{ .Size }}</p>
-            <p>{{ .Mode }}</p>
-            <p>{{ .Date }}</p>
-        </div>
-        <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
-            <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
-            <i class="fas fa-edit"></i>
-            </a>
-            <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
-            <i class="fas fa-download"></i>
-            </a>
-            <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
-            <i class="fas fa-eye"></i>
-            </a>
-            <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
-                <input type="hidden" name="base" value="{{ $.BaseIndex }}">
-                <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                <button type="submit" class="text-red-600 hover:text-red-800">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </form>
-        </div>
+        {{ end }}
     </div>
     {{ end }}
     </div>
-    {{ end }}
 </main>
 
 <!-- Preview Modal -->
 <div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
-    <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px);width: calc(100vw - 100px)">
+    <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px); width: calc(100vw - 100px)">
         <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
         <div id="previewContent" class="p-4 h-full"></div>
     </div>
@@ -284,7 +317,9 @@
 <div id="toast" class="toast"></div>
 
 <script>
-    // Existing upload, preview, toast, and confirmation code …
+    // -------------------------------
+    // UPLOAD & PREVIEW CODE (unchanged)
+    // -------------------------------
     const plainText = [
         "txt", "md", "csv", "log", "xml", "json", "yaml", "ini",
         "conf", "tsv", "properties", "rst", "dat", "tex", "cpp", "h",
@@ -297,36 +332,34 @@
     document.getElementById('uploadForm').addEventListener('submit', function(event) {
         const input = document.getElementById('fileInput');
         const fullPathsInput = document.getElementById('fullPathsInput');
-
         if (input.files.length === 0) {
             event.preventDefault();
             alert("Please select files or a folder.");
             return;
         }
-
         const paths = [];
         for (let file of input.files) {
-            paths.push(file.webkitRelativePath);  // Capturing folder structure
+            paths.push(file.webkitRelativePath);
         }
-
-        // Store paths as JSON in a hidden input field
         fullPathsInput.value = JSON.stringify(paths);
-        console.log(fullPathsInput.value)
+        console.log(fullPathsInput.value);
     });
-    // For image viewer (if needed)
     document.addEventListener("DOMContentLoaded", function() {
         const viewerImages = document.querySelectorAll('.viewer-image');
-        viewerImages.forEach(image => new Viewer(image, {inline: false}));
-        // Populate file types for file filter dropdown
+        viewerImages.forEach(image => new Viewer(image, { inline: false }));
         populateFileTypes();
+        // Global filter event listener
+        document.getElementById('globalFilter').addEventListener('input', () => {
+            filterDirectories();
+            filterImages();
+            filterFiles();
+        });
     });
 
-    // Preview functions (unchanged)
     function previewFile(base, file) {
         const ext = file.split('.').pop().toLowerCase();
         const url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
         let content = '';
-
         if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
             content = `<img src="${url}" class="w-full h-auto rounded" />`;
             showPreview(content);
@@ -353,40 +386,25 @@
             showPreview("Preview not available for this file type.");
         }
     }
-
     function showPreview(content) {
         const modal = document.getElementById('previewModal');
         const previewContent = document.getElementById('previewContent');
         previewContent.innerHTML = content;
         modal.classList.remove('hidden');
     }
-
     function closePreview() {
-        // Stop any playing audio/video
         const video = document.getElementById('videoPreview');
-        if (video) {
-            video.pause();
-            video.currentTime = 0;
-        }
+        if (video) { video.pause(); video.currentTime = 0; }
         const audio = document.getElementById('audioPreview');
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
-        }
+        if (audio) { audio.pause(); audio.currentTime = 0; }
         document.getElementById('previewModal').classList.add('hidden');
     }
-
-    // Toast Notification Function
     function showToast(message) {
         const toast = document.getElementById('toast');
         toast.textContent = message;
         toast.classList.add('show');
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
+        setTimeout(() => { toast.classList.remove('show'); }, 3000);
     }
-
-    // Confirm deletion with notification
     function confirmDelete(type) {
         const confirmMsg = `Are you sure you want to delete this ${type}? This action cannot be undone.`;
         if (confirm(confirmMsg)) {
@@ -395,8 +413,6 @@
         }
         return false;
     }
-
-    // Confirm rename with notification
     function confirmRename(form) {
         if (confirm("Are you sure you want to rename this item?")) {
             showToast("Item renamed successfully.");
@@ -406,53 +422,44 @@
     }
 
     // -------------------------------
-    // FILTER FUNCTIONS
+    // FILTER FUNCTIONS (Global + Category-Specific)
     // -------------------------------
-
-    // Directories filtering (by name)
-    document.getElementById('dirFilter')?.addEventListener('input', filterDirectories);
     function filterDirectories() {
-        const filter = document.getElementById('dirFilter').value.toLowerCase();
+        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
+        const dirFilterValue = (document.getElementById('dirFilter')?.value || "").toLowerCase();
         const bricks = document.querySelectorAll('#directoriesContainer .brick');
         bricks.forEach(brick => {
             const name = brick.getAttribute('data-name').toLowerCase();
-            brick.style.display = name.includes(filter) ? "" : "none";
+            brick.style.display = (name.includes(globalFilterValue) && name.includes(dirFilterValue)) ? "" : "none";
         });
     }
-
-    // Images filtering (by name and type)
-    document.getElementById('imgFilter')?.addEventListener('input', filterImages);
-    document.getElementById('imgTypeFilter')?.addEventListener('change', filterImages);
     function filterImages() {
-        const nameFilter = document.getElementById('imgFilter').value.toLowerCase();
-        const typeFilter = document.getElementById('imgTypeFilter').value.toLowerCase();
+        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
+        const imgFilterValue = (document.getElementById('imgFilter')?.value || "").toLowerCase();
+        const typeFilterValue = (document.getElementById('imgTypeFilter')?.value || "").toLowerCase();
         const bricks = document.querySelectorAll('#imagesContainer .brick');
         bricks.forEach(brick => {
             const name = brick.getAttribute('data-name').toLowerCase();
             const type = brick.getAttribute('data-type');
-            const matchesName = name.includes(nameFilter);
-            const matchesType = typeFilter === "" || type === typeFilter;
+            const matchesName = name.includes(globalFilterValue) && name.includes(imgFilterValue);
+            const matchesType = typeFilterValue === "" || type === typeFilterValue;
             brick.style.display = (matchesName && matchesType) ? "" : "none";
         });
     }
-
-    // Files filtering (by name and type)
-    document.getElementById('fileFilter')?.addEventListener('input', filterFiles);
-    document.getElementById('fileTypeFilter')?.addEventListener('change', filterFiles);
     function filterFiles() {
-        const nameFilter = document.getElementById('fileFilter').value.toLowerCase();
-        const typeFilter = document.getElementById('fileTypeFilter').value.toLowerCase();
+        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
+        const fileFilterValue = (document.getElementById('fileFilter')?.value || "").toLowerCase();
+        const typeFilterValue = (document.getElementById('fileTypeFilter')?.value || "").toLowerCase();
         const bricks = document.querySelectorAll('#filesContainer .brick');
         bricks.forEach(brick => {
             const name = brick.getAttribute('data-name').toLowerCase();
             const type = brick.getAttribute('data-type');
-            const matchesName = name.includes(nameFilter);
-            const matchesType = typeFilter === "" || type === typeFilter;
+            const matchesName = name.includes(globalFilterValue) && name.includes(fileFilterValue);
+            const matchesType = typeFilterValue === "" || type === typeFilterValue;
             brick.style.display = (matchesName && matchesType) ? "" : "none";
         });
     }
-
-    // Dynamically populate the file-type dropdown for Files
+    // Dynamically populate file-type dropdown for Files
     function populateFileTypes() {
         const bricks = document.querySelectorAll('#filesContainer .brick');
         const typesSet = new Set();
@@ -471,6 +478,37 @@
             option.textContent = type.toUpperCase();
             fileTypeFilter.appendChild(option);
         });
+    }
+
+    // -------------------------------
+    // TABS NAVIGATION FUNCTIONS
+    // -------------------------------
+    function showTab(tab) {
+        // Hide all tab contents
+        document.getElementById('tab-content-dirs').classList.add('hidden');
+        document.getElementById('tab-content-imgs').classList.add('hidden');
+        document.getElementById('tab-content-files').classList.add('hidden');
+        // Remove active/inactive classes from all tab buttons
+        document.getElementById('tab-btn-dirs').classList.remove('tab-active');
+        document.getElementById('tab-btn-dirs').classList.add('tab-inactive');
+        document.getElementById('tab-btn-imgs').classList.remove('tab-active');
+        document.getElementById('tab-btn-imgs').classList.add('tab-inactive');
+        document.getElementById('tab-btn-files').classList.remove('tab-active');
+        document.getElementById('tab-btn-files').classList.add('tab-inactive');
+        // Show the selected tab and update button style
+        if(tab === 'dirs') {
+            document.getElementById('tab-content-dirs').classList.remove('hidden');
+            document.getElementById('tab-btn-dirs').classList.remove('tab-inactive');
+            document.getElementById('tab-btn-dirs').classList.add('tab-active');
+        } else if(tab === 'imgs') {
+            document.getElementById('tab-content-imgs').classList.remove('hidden');
+            document.getElementById('tab-btn-imgs').classList.remove('tab-inactive');
+            document.getElementById('tab-btn-imgs').classList.add('tab-active');
+        } else if(tab === 'files') {
+            document.getElementById('tab-content-files').classList.remove('hidden');
+            document.getElementById('tab-btn-files').classList.remove('tab-inactive');
+            document.getElementById('tab-btn-files').classList.add('tab-active');
+        }
     }
 </script>
 </body>
