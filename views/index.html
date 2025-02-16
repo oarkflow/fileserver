@@ -179,7 +179,7 @@
         {{ range .Images }}
         <div class="brick bg-white shadow rounded-lg p-4 relative group hover:shadow-lg">
             <div class="mb-3 w-full h-full relative">
-                <img class="object-contain w-full h-full" src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-cover h-48 w-full rounded cursor-pointer">
+                <img class="object-contain w-full h-full" src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-cover max-h-48 w-full rounded cursor-pointer">
                 <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
             </div>
             <div class="text-gray-500 text-sm flex justify-between">
@@ -192,6 +192,36 @@
                 <i class="fas fa-download"></i>
                 </a>
 
+            </div>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+
+    <!-- Image List -->
+    {{ if .Images }}
+    <h1 class="text-lg font-semibold px-8 pt-4">Image List</h1>
+    <div class="masonry">
+        {{ range .Images }}
+        <div class="brick bg-white overflow-hidden break-all">
+            <div class="relative">
+                <div class="mb-4">
+                    <div class="mb-5">
+                        <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain h-48 w-full mb-2 cursor-pointer">
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <p class="text-gray-700 w-5/6 font-semibold">{{ .Name }}</p>
+                    </div>
+                </div>
+                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
+                    <p>{{ .Size }}</p>
+                    <p>{{ .Mode }}</p>
+                    <p>{{ .Date }}</p>
+                </div>
+                <div class="mt-4 absolute -top-5 right-0">
+                    <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-500 hover:text-blue-700 whitespace-nowrap"><i class="fas fa-download"></i></a>
+                </div>
             </div>
         </div>
         {{ end }}
