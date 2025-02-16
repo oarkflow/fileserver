@@ -92,52 +92,42 @@
 <body class="bg-gray-100 text-gray-800">
 <!-- Header -->
 <header class="bg-blue-600 text-white p-4 flex flex-col sm:flex-row sm:justify-between items-center">
+    <!-- Folder Information -->
     <div>
         <h1 class="text-2xl font-bold">{{ .Title }}</h1>
         <p class="text-sm">Shared directory: {{ .BasePath }}</p>
         <p class="text-sm">Current folder: /{{ .Directory }}</p>
     </div>
-    <div class="mt-2 sm:mt-0">
-        <!-- Additional header actions can be added here -->
+    <!-- Actions: Upload & New Directory -->
+    <div class="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
+        <!-- Upload Form -->
+        <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="flex items-center gap-2">
+            <input type="hidden" name="base" value="{{ .BaseIndex }}">
+            <input type="hidden" name="directory" value="{{ .Directory }}">
+            <!-- Hidden file input triggered by label -->
+            <label for="fileInput" class="bg-blue-500 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded cursor-pointer">
+                Upload Files/Folder
+            </label>
+            <input type="file" id="fileInput" name="file-upload" multiple webkitdirectory directory class="hidden">
+            <input type="hidden" id="fullPathsInput" name="full-paths[]" />
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded">
+                Submit
+            </button>
+        </form>
+        <!-- New Directory Form -->
+        <form action="/mkdir" method="POST" class="flex items-center gap-2">
+            <input type="hidden" name="base" value="{{ .BaseIndex }}">
+            <input type="hidden" name="directory" value="{{ .Directory }}">
+            <input type="text" name="newDirName" placeholder="New directory" required class="py-1 px-2 border border-gray-300 rounded text-sm text-gray-800" style="min-width: 120px;">
+            <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-medium py-1 px-3 rounded">
+                Create
+            </button>
+        </form>
     </div>
 </header>
 
 <!-- Main content container -->
 <main class="p-4">
-    <div class="mb-6 flex flex-wrap gap-2 items-center">
-        <!-- Upload Form -->
-        <div>
-            <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-lg rounded-lg p-4">
-                <fieldset>
-                    <legend class="text-xl font-semibold mb-2">Upload File(s) or Folder(s)</legend>
-                    <input type="hidden" name="base" value="{{ .BaseIndex }}">
-                    <input type="hidden" name="directory" value="{{ .Directory }}">
-                    <!-- Updated input to track folder structure -->
-                    <input type="file" id="fileInput" name="file-upload" multiple webkitdirectory directory class="mb-2 w-full border p-2 rounded">
-                    <input type="hidden" id="fullPathsInput" name="full-paths[]" />
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
-                        Upload
-                    </button>
-                </fieldset>
-            </form>
-        </div>
-
-        <!-- Create New Directory Form -->
-        <div>
-            <form action="/mkdir" method="POST" class="bg-white shadow-lg rounded-lg p-4">
-                <fieldset>
-                    <legend class="text-xl font-semibold mb-2">Create New Directory</legend>
-                    <input type="hidden" name="base" value="{{ .BaseIndex }}">
-                    <input type="hidden" name="directory" value="{{ .Directory }}">
-                    <input type="text" name="newDirName" placeholder="New directory name" required class="mb-2 w-full p-2 border rounded">
-                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
-                        Create
-                    </button>
-                </fieldset>
-            </form>
-        </div>
-    </div>
-
     <!-- Parent Directory Link -->
     {{ if ne .Directory "" }}
     <div class="mb-6">
