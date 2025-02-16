@@ -92,35 +92,40 @@
 
 <!-- Main content container -->
 <main class="p-4">
-    <!-- Upload Form -->
-    <div class="mb-6">
-        <form enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-lg rounded-lg px-8 pt-6 pb-8">
-            <fieldset>
-                <legend class="text-xl font-semibold mb-4">Upload File(s) or Folder(s)</legend>
-                <input type="hidden" name="base" value="{{ .BaseIndex }}">
-                <input type="hidden" name="directory" value="{{ .Directory }}">
-                <!-- Allow both files and folders -->
-                <input type="file" name="file-upload" required multiple webkitdirectory directory class="mb-4 w-full border p-2 rounded">
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
-                    Upload
-                </button>
-            </fieldset>
-        </form>
-    </div>
+    <div class="mb-6 flex gap-2 items-center">
+        <!-- Upload Form -->
+        <div>
+            <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-lg rounded-lg p-4">
+                <fieldset>
+                    <legend class="text-xl font-semibold mb-2">Upload File(s) or Folder(s)</legend>
+                    <input type="hidden" name="base" value="{{ .BaseIndex }}">
+                    <input type="hidden" name="directory" value="{{ .Directory }}">
 
-    <!-- Create New Directory Form -->
-    <div class="mb-6">
-        <form action="/mkdir" method="POST" class="bg-white shadow-lg rounded-lg px-8 pt-6 pb-8">
-            <fieldset>
-                <legend class="text-xl font-semibold mb-4">Create New Directory</legend>
-                <input type="hidden" name="base" value="{{ .BaseIndex }}">
-                <input type="hidden" name="directory" value="{{ .Directory }}">
-                <input type="text" name="newDirName" placeholder="New directory name" required class="mb-4 w-full p-2 border rounded">
-                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
-                    Create
-                </button>
-            </fieldset>
-        </form>
+                    <!-- Updated input to track folder structure -->
+                    <input type="file" id="fileInput" name="file-upload" multiple webkitdirectory directory class="mb-2 w-full border p-2 rounded">
+                    <input type="hidden" id="fullPathsInput" name="full-paths[]" />
+
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
+                        Upload
+                    </button>
+                </fieldset>
+            </form>
+        </div>
+
+        <!-- Create New Directory Form -->
+        <div>
+            <form action="/mkdir" method="POST" class="bg-white shadow-lg rounded-lg p-4">
+                <fieldset>
+                    <legend class="text-xl font-semibold mb-2">Create New Directory</legend>
+                    <input type="hidden" name="base" value="{{ .BaseIndex }}">
+                    <input type="hidden" name="directory" value="{{ .Directory }}">
+                    <input type="text" name="newDirName" placeholder="New directory name" required class="mb-2 w-full p-2 border rounded">
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
+                        Create
+                    </button>
+                </fieldset>
+            </form>
+        </div>
     </div>
 
     <!-- Parent Directory Link -->
@@ -179,7 +184,7 @@
         {{ range .Images }}
         <div class="brick bg-white shadow rounded-lg p-4 relative group hover:shadow-lg">
             <div class="mb-3 w-full h-full relative">
-                <img class="object-contain w-full h-full" src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-cover max-h-48 w-full rounded cursor-pointer">
+                <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
                 <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
             </div>
             <div class="text-gray-500 text-sm flex justify-between">
@@ -192,36 +197,13 @@
                 <i class="fas fa-download"></i>
                 </a>
 
-            </div>
-        </div>
-        {{ end }}
-    </div>
-    {{ end }}
-
-    <!-- Image List -->
-    {{ if .Images }}
-    <h1 class="text-lg font-semibold px-8 pt-4">Image List</h1>
-    <div class="masonry">
-        {{ range .Images }}
-        <div class="brick bg-white overflow-hidden break-all">
-            <div class="relative">
-                <div class="mb-4">
-                    <div class="mb-5">
-                        <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain h-48 w-full mb-2 cursor-pointer">
-                    </div>
-
-                    <div class="flex justify-between items-center">
-                        <p class="text-gray-700 w-5/6 font-semibold">{{ .Name }}</p>
-                    </div>
-                </div>
-                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
-                    <p>{{ .Size }}</p>
-                    <p>{{ .Mode }}</p>
-                    <p>{{ .Date }}</p>
-                </div>
-                <div class="mt-4 absolute -top-5 right-0">
-                    <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-500 hover:text-blue-700 whitespace-nowrap"><i class="fas fa-download"></i></a>
-                </div>
+                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
+                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                    <button type="submit" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
             </div>
         </div>
         {{ end }}
@@ -233,11 +215,11 @@
     <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
     <div class="masonry">
         {{ range .Files }}
-        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative group hover:shadow-lg">
+        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative group hover:shadow-none hover:border">
             <div class="flex flex-col gap-2 mb-2">
                 <div class="flex items-center gap-3">
                     <i class="fas fa-file text-2xl text-gray-600"></i>
-                    <p class="text-gray-700 font-semibold truncate">{{ .Name }}</p>
+                    <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
                 </div>
             </div>
             <div class="text-gray-500 text-sm flex justify-between">
@@ -342,6 +324,25 @@
         "hbs",
         "mustache"
     ]
+    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+        const input = document.getElementById('fileInput');
+        const fullPathsInput = document.getElementById('fullPathsInput');
+
+        if (input.files.length === 0) {
+            event.preventDefault();
+            alert("Please select files or a folder.");
+            return;
+        }
+
+        const paths = [];
+        for (let file of input.files) {
+            paths.push(file.webkitRelativePath);  // Capturing folder structure
+        }
+
+        // Store paths as JSON in a hidden input field
+        fullPathsInput.value = JSON.stringify(paths);
+        console.log(fullPathsInput.value)
+    });
     // For image viewer (if needed)
     document.addEventListener("DOMContentLoaded", function() {
         const viewerImages = document.querySelectorAll('.viewer-image');
