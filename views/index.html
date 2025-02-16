@@ -2,15 +2,15 @@
 <html lang="en" dir="ltr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="Simple file server">
-    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ .Title }}</title>
-    <script src="/static/tailwind.js"></script>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+    <link rel="stylesheet" href="/static/fontawesome.min.css">
     <link href="/static/viewer.min.css" rel="stylesheet">
+    <script src="/static/tailwind.js"></script>
     <script src="/static/viewer.min.js"></script>
-    <link rel="stylesheet" href="/static/fontawesome.min.css" />
     <style>
+        /* Masonry layout for file lists */
         .masonry {
             --masonry-gap: 1rem;
             --masonry-brick-width: 400px;
@@ -18,32 +18,23 @@
             column-fill: initial;
             column-width: var(--masonry-brick-width);
         }
-
         .masonry > * {
             break-inside: avoid;
             margin-bottom: var(--masonry-gap);
         }
-
         @supports(grid-template-rows: masonry) {
             .masonry {
                 display: grid;
                 gap: var(--masonry-gap);
                 grid-template-rows: masonry;
                 grid-template-columns: repeat(auto-fill, minmax(var(--masonry-brick-width), 1fr));
-                align-tracks: stretch;
             }
-
             .masonry > * {
                 margin-bottom: initial;
             }
         }
-
-        .masonry {
-            padding: 2rem;
-        }
-        .brick {
-            padding:1rem;
-        }
+        .masonry { padding: 2rem; }
+        .brick { padding: 1rem; }
         .masonry-dir {
             --masonry-gap: 1rem;
             --masonry-brick-width: 300px;
@@ -51,127 +42,196 @@
             column-fill: initial;
             column-width: var(--masonry-brick-width);
         }
-
         .masonry-dir > * {
             break-inside: avoid;
             margin-bottom: var(--masonry-gap);
         }
-
         @supports(grid-template-rows: masonry) {
             .masonry-dir {
                 display: grid;
                 gap: var(--masonry-gap);
                 grid-template-rows: masonry;
                 grid-template-columns: repeat(auto-fill, minmax(var(--masonry-brick-width), 1fr));
-                align-tracks: stretch;
             }
-
-            .masonry-dir > * {
-                margin-bottom: initial;
-            }
+            .masonry-dir > * { margin-bottom: initial; }
         }
-
-        .masonry-dir {
-            padding: 2rem;
+        .masonry-dir { padding: 2rem; }
+        /* Modal styles for preview dialog */
+        .modal-bg { background-color: rgba(0,0,0,0.5); }
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: #4B5563;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .toast.show {
+            opacity: 1;
         }
     </style>
-
 </head>
 <body class="bg-gray-100 text-gray-800">
-
-<header class="bg-blue-500 text-white p-4">
-    <h1 class="text-2xl font-bold">{{ .Title }}</h1>
+<!-- Header -->
+<header class="bg-blue-600 text-white p-4 flex flex-col sm:flex-row sm:justify-between items-center">
+    <div>
+        <h1 class="text-2xl font-bold">{{ .Title }}</h1>
+        <p class="text-sm">Shared directory: {{ .BasePath }}</p>
+        <p class="text-sm">Current folder: /{{ .Directory }}</p>
+    </div>
+    <div class="mt-2 sm:mt-0">
+        <!-- Additional header actions can be added here -->
+    </div>
 </header>
 
+<!-- Main content container -->
 <main class="p-4">
-    <div class="mb-4">
-        <form enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+    <!-- Upload Form -->
+    <div class="mb-6">
+        <form enctype="multipart/form-data" action="/upload" method="POST" class="bg-white shadow-lg rounded-lg px-8 pt-6 pb-8">
             <fieldset>
-                <legend class="text-lg font-semibold mb-4">Upload new file/files</legend>
-                <input type="hidden" id="directory" name="directory" value="{{ .Directory }}">
-                <input type="file" name="file-upload" required multiple class="mb-4">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Upload</button>
+                <legend class="text-xl font-semibold mb-4">Upload File(s) or Folder(s)</legend>
+                <input type="hidden" name="base" value="{{ .BaseIndex }}">
+                <input type="hidden" name="directory" value="{{ .Directory }}">
+                <!-- Allow both files and folders -->
+                <input type="file" name="file-upload" required multiple webkitdirectory directory class="mb-4 w-full border p-2 rounded">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
+                    Upload
+                </button>
             </fieldset>
         </form>
     </div>
 
-    {{ if ne .Directory "/" }}
-    <div class="mb-4">
-        <a href="/view?dir={{ .Parent }}" class="text-blue-500 hover:text-blue-700">To Parent Directory</a>
+    <!-- Create New Directory Form -->
+    <div class="mb-6">
+        <form action="/mkdir" method="POST" class="bg-white shadow-lg rounded-lg px-8 pt-6 pb-8">
+            <fieldset>
+                <legend class="text-xl font-semibold mb-4">Create New Directory</legend>
+                <input type="hidden" name="base" value="{{ .BaseIndex }}">
+                <input type="hidden" name="directory" value="{{ .Directory }}">
+                <input type="text" name="newDirName" placeholder="New directory name" required class="mb-4 w-full p-2 border rounded">
+                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
+                    Create
+                </button>
+            </fieldset>
+        </form>
+    </div>
+
+    <!-- Parent Directory Link -->
+    {{ if ne .Directory "" }}
+    <div class="mb-6">
+        <a href="/view?base={{ .BaseIndex }}&dir={{ .Parent }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-block">
+            Go to Parent Directory
+        </a>
     </div>
     {{ end }}
 
+    <!-- Directory List -->
     {{ if .Dirs }}
-    <h1 class="text-lg font-semibold px-8 pt-4">Directory List</h1>
+    <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
     <div class="masonry-dir">
         {{ range .Dirs }}
-        <div class="brick bg-white overflow-hidden break-all">
-            <div class="relative">
-                <div class="mb-4 flex align-middle items-center gap-2  w-5/6">
-                    <i class="fas fa-folder"></i>
-                    <a href="/view?dir={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}/" class="text-blue-500 hover:text-blue-700 font-bold">{{ .Name }}/</a>
-                </div>
-                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
-                    <p>{{ .Size }}</p>
-                    <p>{{ .Mode }}</p>
-                    <p>{{ .Date }}</p>
-                </div>
+        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg">
+            <div class="flex items-center gap-3 mb-2">
+                <i class="fas fa-folder text-2xl text-yellow-500"></i>
+                <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:underline font-semibold text-lg">
+                {{ .Name }}/
+                </a>
+            </div>
+            <div class="text-gray-500 text-sm flex justify-between">
+                <p>{{ .Size }}</p>
+                <p>{{ .Mode }}</p>
+                <p>{{ .Date }}</p>
+            </div>
+            <!-- Rename & Delete for directories -->
+            <div class="mt-3 flex items-center gap-2">
+                <form action="/rename" method="POST" onsubmit="return confirmRename(this)" class="flex items-center gap-1">
+                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                    <input type="hidden" name="oldPath" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                    <input type="text" name="newName" placeholder="Rename" class="border rounded p-1 text-sm">
+                    <button type="submit" class="text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </form>
+                <form action="/delete" method="POST" onsubmit="return confirmDelete('directory')" class="inline">
+                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                    <button type="submit" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
             </div>
         </div>
         {{ end }}
     </div>
     {{ end }}
+
+    <!-- Image List -->
     {{ if .Images }}
-    <h1 class="text-lg font-semibold px-8 pt-4">Image List</h1>
+    <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
     <div class="masonry">
         {{ range .Images }}
-        <div class="brick bg-white overflow-hidden break-all">
-            <div class="relative">
-                <div class="mb-4">
-                    <div class="mb-5">
-                        <img src="/get?file={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain h-48 w-full mb-2 cursor-pointer">
-                    </div>
+        <div class="brick bg-white shadow rounded-lg p-4 relative group hover:shadow-lg">
+            <div class="mb-3 w-full h-full relative">
+                <img class="object-contain w-full h-full" src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-cover h-48 w-full rounded cursor-pointer">
+                <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
+            </div>
+            <div class="text-gray-500 text-sm flex justify-between">
+                <p>{{ .Size }}</p>
+                <p>{{ .Mode }}</p>
+                <p>{{ .Date }}</p>
+            </div>
+            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg invisible group-hover:visible group-hover:shadow">
+                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-download"></i>
+                </a>
 
-                    <div class="flex justify-between items-center">
-                        <p class="text-gray-700 w-5/6 font-semibold">{{ .Name }}</p>
-                    </div>
-                </div>
-                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
-                    <p>{{ .Size }}</p>
-                    <p>{{ .Mode }}</p>
-                    <p>{{ .Date }}</p>
-                </div>
-                <div class="mt-4 absolute -top-5 right-0">
-                    <a href="/get?file={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-500 hover:text-blue-700 whitespace-nowrap"><i class="fas fa-download"></i></a>
-                </div>
             </div>
         </div>
         {{ end }}
     </div>
     {{ end }}
+
+    <!-- File List -->
     {{ if .Files }}
-    <h1 class="text-lg font-semibold px-8 pt-4">File List</h1>
+    <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
     <div class="masonry">
         {{ range .Files }}
-        <div class="brick bg-white overflow-hidden break-all">
-            <div class="relative group">
-                <div class="mb-4">
-                    <div></div>
-
-                    <div class="flex items-center align-middle items-center gap-2">
-                        <i class="fas fa-file self-start pt-2"></i>
-                        <p class="text-gray-700 w-5/6 font-semibold">{{ .Name }}</p>
-                    </div>
-                    <div><a href="#"><span class="fas fa-eye text-blue-500 hover:text-blue-600"></span></a></div>
+        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative group hover:shadow-lg">
+            <div class="flex flex-col gap-2 mb-2">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-file text-2xl text-gray-600"></i>
+                    <p class="text-gray-700 font-semibold truncate">{{ .Name }}</p>
                 </div>
-                <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
-                    <p>{{ .Size }}</p>
-                    <p>{{ .Mode }}</p>
-                    <p>{{ .Date }}</p>
-                </div>
-                <div class="mt-4 absolute -top-5 right-0">
-                    <a href="/get?file={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-500 hover:text-blue-700 whitespace-nowrap"><i class="fas fa-download"></i></a>
-                </div>
+            </div>
+            <div class="text-gray-500 text-sm flex justify-between">
+                <p>{{ .Size }}</p>
+                <p>{{ .Mode }}</p>
+                <p>{{ .Date }}</p>
+            </div>
+            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg invisible group-hover:visible group-hover:shadow">
+                <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-edit"></i>
+                </a>
+                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+                <i class="fas fa-download"></i>
+                </a>
+                <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
+                <i class="fas fa-eye"></i>
+                </a>
+                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
+                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                    <button type="submit" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
             </div>
         </div>
         {{ end }}
@@ -179,11 +239,168 @@
     {{ end }}
 </main>
 
+<!-- Preview Modal -->
+<div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
+    <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px);width: calc(100vw - 100px)">
+        <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
+        <div id="previewContent" class="p-4 h-full"></div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast"></div>
+
 <script>
+    const plainText = [
+        "txt",
+        "md",
+        "csv",
+        "log",
+        "xml",
+        "json",
+        "yaml",
+        "ini",
+        "conf",
+        "tsv",
+        "properties",
+        "rst",
+        "dat",
+        "tex",
+        "cpp",
+        "h",
+        "cs",
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "java",
+        "py",
+        "rb",
+        "go",
+        "swift",
+        "php",
+        "html",
+        "css",
+        "scss",
+        "less",
+        "bash",
+        "sh",
+        "zsh",
+        "bat",
+        "pl",
+        "perl",
+        "lua",
+        "r",
+        "sql",
+        "json5",
+        "yml",
+        "c",
+        "cpp",
+        "dart",
+        "m",
+        "rs",
+        "v",
+        "clj",
+        "el",
+        "kt",
+        "coffee",
+        "vbs",
+        "fs",
+        "d",
+        "as",
+        "groovy",
+        "hbs",
+        "mustache"
+    ]
+    // For image viewer (if needed)
     document.addEventListener("DOMContentLoaded", function() {
         const viewerImages = document.querySelectorAll('.viewer-image');
         viewerImages.forEach(image => new Viewer(image, {inline: false}));
     });
+
+    // Preview function for multiple file types
+    function previewFile(base, file) {
+        const ext = file.split('.').pop().toLowerCase();
+        const url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
+        let content = '';
+
+        if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
+            content = `<img src="${url}" class="w-full h-auto rounded" />`;
+            showPreview(content);
+        } else if (plainText.includes(ext)) {
+            fetch(url)
+                .then(response => response.text())
+                .then(text => {
+                    content = `<pre style="height: calc(100vh - 170px)" class="p-4 bg-gray-800 text-white overflow-x-auto rounded-lg font-mono text-sm">${text}</pre>`;
+                    showPreview(content);
+                })
+                .catch(error => {
+                    showPreview("Error loading file.");
+                });
+        } else if (ext === 'pdf') {
+            content = `<embed src="${url}" type="application/pdf" class="w-full h-full rounded" />`;
+            showPreview(content);
+        } else if (['mp4', 'webm'].includes(ext)) {
+            content = `<video controls class="w-full rounded" id="videoPreview"><source src="${url}" type="video/${ext}">Your browser does not support the video tag.</video>`;
+            showPreview(content);
+        } else if (['mp3', 'wav'].includes(ext)) {
+            content = `<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`;
+            showPreview(content);
+        } else {
+            showPreview("Preview not available for this file type.");
+        }
+    }
+
+    function showPreview(content) {
+        const modal = document.getElementById('previewModal');
+        const previewContent = document.getElementById('previewContent');
+        previewContent.innerHTML = content;
+        modal.classList.remove('hidden');
+    }
+
+    function closePreview() {
+        // Stop any playing audio/video
+        const video = document.getElementById('videoPreview');
+        if (video) {
+            video.pause();
+            video.currentTime = 0;
+        }
+        const audio = document.getElementById('audioPreview');
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        document.getElementById('previewModal').classList.add('hidden');
+    }
+
+    // Toast Notification Function
+    function showToast(message) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    // Confirm deletion with notification
+    function confirmDelete(type) {
+        const confirmMsg = `Are you sure you want to delete this ${type}? This action cannot be undone.`;
+        if (confirm(confirmMsg)) {
+            showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully.`);
+            return true;
+        }
+        return false;
+    }
+
+    // Confirm rename with notification
+    function confirmRename(form) {
+        if (confirm("Are you sure you want to rename this item?")) {
+            showToast("Item renamed successfully.");
+            return true;
+        }
+        return false;
+    }
 </script>
 </body>
 </html>

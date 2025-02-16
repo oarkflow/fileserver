@@ -89,7 +89,7 @@
             <div class="relative">
                 <div class="mb-4 flex align-middle items-center gap-2  w-5/6">
                     <i class="fas fa-folder"></i>
-                    <a href="/view?dir={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}/" class="text-blue-500 hover:text-blue-700 font-bold">{{ .Name }}/</a>
+                    <a href="/view?base={{ if eq $.Directory "/" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}/" class="text-blue-500 hover:text-blue-700 font-bold">{{ .Name }}/</a>
                 </div>
                 <div class="text-gray-600 text-sm flex gap-4 justify-between pt-10">
                     <p>{{ .Size }}</p>

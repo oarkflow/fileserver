@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/fontawesome.min.css">
+    <script src="/static/tailwind.js"></script>
+</head>
+<body class="bg-gray-100">
+<header class="bg-blue-600 text-white p-4">
+    <h1 class="text-3xl font-bold">{{ .Title }}</h1>
+</header>
+<main class="p-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {{ range .Bases }}
+        <div class="bg-white rounded shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">{{ .Path }}</h2>
+            <a href="/view?base={{ .Index }}" class="inline-block bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Open Directory
+            </a>
+        </div>
+        {{ end }}
+    </div>
+</main>
+</body>
+</html>
