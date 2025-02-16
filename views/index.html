@@ -147,9 +147,12 @@
     </div>
     {{ end }}
 
-    <!-- Global Filter -->
-    <div class="px-4 mb-4">
-        <input type="text" id="globalFilter" placeholder="Global filter by name" class="border p-2 rounded w-full">
+    <!-- Global Filter (Text & File Type) -->
+    <div class="px-4 mb-4 flex gap-2">
+        <input type="text" id="globalFilter" placeholder="Global filter by name" class="border p-2 rounded flex-1">
+        <select id="globalTypeFilter" class="border p-2 rounded">
+            <option value="">All Types</option>
+        </select>
     </div>
 
     <!-- Tabs Navigation -->
@@ -164,10 +167,6 @@
     <div id="tab-content-dirs">
         {{ if .Dirs }}
         <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
-        <!-- Directory Filter (category-specific) -->
-        <div class="px-4 mb-4">
-            <input type="text" id="dirFilter" placeholder="Filter directories by name" class="border p-2 rounded w-full">
-        </div>
         <div id="directoriesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
             {{ range .Dirs }}
             <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg" data-name="{{ .Name }}">
@@ -210,18 +209,6 @@
     <div id="tab-content-imgs" class="hidden">
         {{ if .Images }}
         <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
-        <!-- Image Filter (category-specific) -->
-        <div class="px-4 mb-4 flex gap-2">
-            <input type="text" id="imgFilter" placeholder="Filter images by name" class="border p-2 rounded flex-1">
-            <select id="imgTypeFilter" class="border p-2 rounded">
-                <option value="">All Types</option>
-                <option value="png">PNG</option>
-                <option value="jpg">JPG</option>
-                <option value="jpeg">JPEG</option>
-                <option value="gif">GIF</option>
-                <option value="svg">SVG</option>
-            </select>
-        </div>
         <div id="imagesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
             {{ range .Images }}
             <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
@@ -258,14 +245,6 @@
     <div id="tab-content-files" class="hidden">
         {{ if .Files }}
         <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
-        <!-- File Filter (category-specific) -->
-        <div class="px-4 mb-4 flex gap-2">
-            <input type="text" id="fileFilter" placeholder="Filter files by name" class="border p-2 rounded flex-1">
-            <select id="fileTypeFilter" class="border p-2 rounded">
-                <option value="">All Types</option>
-                <!-- Options will be populated dynamically -->
-            </select>
-        </div>
         <div id="filesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
             {{ range .Files }}
             <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
@@ -347,13 +326,9 @@
     document.addEventListener("DOMContentLoaded", function() {
         const viewerImages = document.querySelectorAll('.viewer-image');
         viewerImages.forEach(image => new Viewer(image, { inline: false }));
-        populateFileTypes();
-        // Global filter event listener
-        document.getElementById('globalFilter').addEventListener('input', () => {
-            filterDirectories();
-            filterImages();
-            filterFiles();
-        });
+        populateGlobalFileTypes();
+        document.getElementById('globalFilter').addEventListener('input', applyGlobalFilter);
+        document.getElementById('globalTypeFilter').addEventListener('change', applyGlobalFilter);
     });
 
     function previewFile(base, file) {
@@ -422,61 +397,60 @@
     }
 
     // -------------------------------
-    // FILTER FUNCTIONS (Global + Category-Specific)
+    // GLOBAL FILTER FUNCTIONALITY
     // -------------------------------
-    function filterDirectories() {
-        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
-        const dirFilterValue = (document.getElementById('dirFilter')?.value || "").toLowerCase();
-        const bricks = document.querySelectorAll('#directoriesContainer .brick');
-        bricks.forEach(brick => {
+    function applyGlobalFilter() {
+        const globalFilterValue = document.getElementById('globalFilter').value.toLowerCase();
+        const globalTypeFilterValue = document.getElementById('globalTypeFilter').value.toLowerCase();
+
+        // Filter Directories (no file type)
+        const directories = document.querySelectorAll('#directoriesContainer .brick');
+        directories.forEach(brick => {
             const name = brick.getAttribute('data-name').toLowerCase();
-            brick.style.display = (name.includes(globalFilterValue) && name.includes(dirFilterValue)) ? "" : "none";
+            brick.style.display = name.includes(globalFilterValue) ? "" : "none";
+        });
+
+        // Filter Images
+        const images = document.querySelectorAll('#imagesContainer .brick');
+        images.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            const type = brick.getAttribute('data-type').toLowerCase();
+            let show = name.includes(globalFilterValue);
+            if (globalTypeFilterValue !== "") {
+                show = show && (type === globalTypeFilterValue);
+            }
+            brick.style.display = show ? "" : "none";
+        });
+
+        // Filter Files
+        const files = document.querySelectorAll('#filesContainer .brick');
+        files.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            const type = brick.getAttribute('data-type').toLowerCase();
+            let show = name.includes(globalFilterValue);
+            if (globalTypeFilterValue !== "") {
+                show = show && (type === globalTypeFilterValue);
+            }
+            brick.style.display = show ? "" : "none";
         });
     }
-    function filterImages() {
-        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
-        const imgFilterValue = (document.getElementById('imgFilter')?.value || "").toLowerCase();
-        const typeFilterValue = (document.getElementById('imgTypeFilter')?.value || "").toLowerCase();
-        const bricks = document.querySelectorAll('#imagesContainer .brick');
-        bricks.forEach(brick => {
-            const name = brick.getAttribute('data-name').toLowerCase();
-            const type = brick.getAttribute('data-type');
-            const matchesName = name.includes(globalFilterValue) && name.includes(imgFilterValue);
-            const matchesType = typeFilterValue === "" || type === typeFilterValue;
-            brick.style.display = (matchesName && matchesType) ? "" : "none";
-        });
-    }
-    function filterFiles() {
-        const globalFilterValue = (document.getElementById('globalFilter')?.value || "").toLowerCase();
-        const fileFilterValue = (document.getElementById('fileFilter')?.value || "").toLowerCase();
-        const typeFilterValue = (document.getElementById('fileTypeFilter')?.value || "").toLowerCase();
-        const bricks = document.querySelectorAll('#filesContainer .brick');
-        bricks.forEach(brick => {
-            const name = brick.getAttribute('data-name').toLowerCase();
-            const type = brick.getAttribute('data-type');
-            const matchesName = name.includes(globalFilterValue) && name.includes(fileFilterValue);
-            const matchesType = typeFilterValue === "" || type === typeFilterValue;
-            brick.style.display = (matchesName && matchesType) ? "" : "none";
-        });
-    }
-    // Dynamically populate file-type dropdown for Files
-    function populateFileTypes() {
-        const bricks = document.querySelectorAll('#filesContainer .brick');
+
+    function populateGlobalFileTypes() {
         const typesSet = new Set();
+        const bricks = document.querySelectorAll('#imagesContainer .brick, #filesContainer .brick');
         bricks.forEach(brick => {
-            const name = brick.getAttribute('data-name').toLowerCase();
-            if(name.includes('.')) {
-                const ext = name.split('.').pop();
-                typesSet.add(ext);
+            const type = brick.getAttribute('data-type');
+            if (type) {
+                typesSet.add(type.toLowerCase());
             }
         });
-        const fileTypeFilter = document.getElementById('fileTypeFilter');
-        fileTypeFilter.innerHTML = '<option value="">All Types</option>';
+        const globalTypeFilter = document.getElementById('globalTypeFilter');
+        globalTypeFilter.innerHTML = '<option value="">All Types</option>';
         typesSet.forEach(type => {
             const option = document.createElement('option');
             option.value = type;
             option.textContent = type.toUpperCase();
-            fileTypeFilter.appendChild(option);
+            globalTypeFilter.appendChild(option);
         });
     }
 
