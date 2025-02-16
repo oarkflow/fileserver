@@ -29,9 +29,7 @@
                 grid-template-rows: masonry;
                 grid-template-columns: repeat(auto-fill, minmax(var(--masonry-brick-width), 1fr));
             }
-            .masonry > * {
-                margin-bottom: initial;
-            }
+            .masonry > * { margin-bottom: initial; }
         }
         .masonry { padding: 2rem; }
         .brick { padding: 1rem; }
@@ -137,12 +135,16 @@
     </div>
     {{ end }}
 
-    <!-- Directory List -->
+    <!-- Directories Section -->
     {{ if .Dirs }}
     <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
-    <div class="masonry-dir">
+    <!-- Directory Filter -->
+    <div class="px-4 mb-4">
+        <input type="text" id="dirFilter" placeholder="Filter directories by name" class="border p-2 rounded w-full">
+    </div>
+    <div id="directoriesContainer" class="masonry-dir">
         {{ range .Dirs }}
-        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg">
+        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg" data-name="{{ .Name }}">
             <div class="flex items-center gap-3 mb-2">
                 <i class="fas fa-folder text-2xl text-yellow-500"></i>
                 <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:underline font-semibold text-lg">
@@ -177,76 +179,95 @@
     </div>
     {{ end }}
 
-    <!-- Image List -->
+    <!-- Images Section -->
     {{ if .Images }}
     <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
-    <div class="masonry">
+    <!-- Image Filter -->
+    <div class="px-4 mb-4 flex gap-2">
+        <input type="text" id="imgFilter" placeholder="Filter images by name" class="border p-2 rounded flex-1">
+        <select id="imgTypeFilter" class="border p-2 rounded">
+            <option value="">All Types</option>
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="gif">GIF</option>
+            <option value="svg">SVG</option>
+        </select>
+    </div>
+    <div id="imagesContainer" class="masonry">
         {{ range .Images }}
-        <div class="brick bg-white shadow rounded-lg p-4 relative group hover:shadow-lg">
-            <div class="mb-3 w-full h-full relative">
-                <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
-                <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
-            </div>
-            <div class="text-gray-500 text-sm flex justify-between">
-                <p>{{ .Size }}</p>
-                <p>{{ .Mode }}</p>
-                <p>{{ .Date }}</p>
-            </div>
-            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg invisible group-hover:visible group-hover:shadow">
-                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
-                <i class="fas fa-download"></i>
-                </a>
-
-                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
-                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
-                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                    <button type="submit" class="text-red-600 hover:text-red-800">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </form>
-            </div>
+        <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+        <div class="mb-3 w-full h-full relative">
+            <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
+            <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
         </div>
-        {{ end }}
+        <div class="text-gray-500 text-sm flex justify-between">
+            <p>{{ .Size }}</p>
+            <p>{{ .Mode }}</p>
+            <p>{{ .Date }}</p>
+        </div>
+        <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+            <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+            <i class="fas fa-download"></i>
+            </a>
+            <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
+                <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                <button type="submit" class="text-red-600 hover:text-red-800">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+    {{ end }}
     </div>
     {{ end }}
 
-    <!-- File List -->
+    <!-- Files Section -->
     {{ if .Files }}
     <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
-    <div class="masonry">
+    <!-- File Filter -->
+    <div class="px-4 mb-4 flex gap-2">
+        <input type="text" id="fileFilter" placeholder="Filter files by name" class="border p-2 rounded flex-1">
+        <select id="fileTypeFilter" class="border p-2 rounded">
+            <option value="">All Types</option>
+            <!-- Options will be populated dynamically -->
+        </select>
+    </div>
+    <div id="filesContainer" class="masonry">
         {{ range .Files }}
-        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative group hover:shadow-none hover:border">
-            <div class="flex flex-col gap-2 mb-2">
-                <div class="flex items-center gap-3">
-                    <i class="fas fa-file text-2xl text-gray-600"></i>
-                    <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
-                </div>
-            </div>
-            <div class="text-gray-500 text-sm flex justify-between">
-                <p>{{ .Size }}</p>
-                <p>{{ .Mode }}</p>
-                <p>{{ .Date }}</p>
-            </div>
-            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg invisible group-hover:visible group-hover:shadow">
-                <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
-                <i class="fas fa-edit"></i>
-                </a>
-                <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
-                <i class="fas fa-download"></i>
-                </a>
-                <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
-                <i class="fas fa-eye"></i>
-                </a>
-                <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
-                    <input type="hidden" name="base" value="{{ $.BaseIndex }}">
-                    <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                    <button type="submit" class="text-red-600 hover:text-red-800">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </form>
+        <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+        <div class="flex flex-col gap-2 mb-2">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-file text-2xl text-gray-600"></i>
+                <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
             </div>
         </div>
-        {{ end }}
+        <div class="text-gray-500 text-sm flex justify-between">
+            <p>{{ .Size }}</p>
+            <p>{{ .Mode }}</p>
+            <p>{{ .Date }}</p>
+        </div>
+        <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+            <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
+            <i class="fas fa-edit"></i>
+            </a>
+            <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
+            <i class="fas fa-download"></i>
+            </a>
+            <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
+            <i class="fas fa-eye"></i>
+            </a>
+            <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
+                <input type="hidden" name="base" value="{{ $.BaseIndex }}">
+                <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
+                <button type="submit" class="text-red-600 hover:text-red-800">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+    {{ end }}
     </div>
     {{ end }}
 </main>
@@ -263,67 +284,16 @@
 <div id="toast" class="toast"></div>
 
 <script>
+    // Existing upload, preview, toast, and confirmation code …
     const plainText = [
-        "txt",
-        "md",
-        "csv",
-        "log",
-        "xml",
-        "json",
-        "yaml",
-        "ini",
-        "conf",
-        "tsv",
-        "properties",
-        "rst",
-        "dat",
-        "tex",
-        "cpp",
-        "h",
-        "cs",
-        "js",
-        "jsx",
-        "ts",
-        "tsx",
-        "java",
-        "py",
-        "rb",
-        "go",
-        "swift",
-        "php",
-        "html",
-        "css",
-        "scss",
-        "less",
-        "bash",
-        "sh",
-        "zsh",
-        "bat",
-        "pl",
-        "perl",
-        "lua",
-        "r",
-        "sql",
-        "json5",
-        "yml",
-        "c",
-        "cpp",
-        "dart",
-        "m",
-        "rs",
-        "v",
-        "clj",
-        "el",
-        "kt",
-        "coffee",
-        "vbs",
-        "fs",
-        "d",
-        "as",
-        "groovy",
-        "hbs",
-        "mustache"
-    ]
+        "txt", "md", "csv", "log", "xml", "json", "yaml", "ini",
+        "conf", "tsv", "properties", "rst", "dat", "tex", "cpp", "h",
+        "cs", "js", "jsx", "ts", "tsx", "java", "py", "rb", "go",
+        "swift", "php", "html", "css", "scss", "less", "bash", "sh",
+        "zsh", "bat", "pl", "perl", "lua", "r", "sql", "json5", "yml",
+        "c", "cpp", "dart", "m", "rs", "v", "clj", "el", "kt", "coffee",
+        "vbs", "fs", "d", "as", "groovy", "hbs", "mustache"
+    ];
     document.getElementById('uploadForm').addEventListener('submit', function(event) {
         const input = document.getElementById('fileInput');
         const fullPathsInput = document.getElementById('fullPathsInput');
@@ -347,9 +317,11 @@
     document.addEventListener("DOMContentLoaded", function() {
         const viewerImages = document.querySelectorAll('.viewer-image');
         viewerImages.forEach(image => new Viewer(image, {inline: false}));
+        // Populate file types for file filter dropdown
+        populateFileTypes();
     });
 
-    // Preview function for multiple file types
+    // Preview functions (unchanged)
     function previewFile(base, file) {
         const ext = file.split('.').pop().toLowerCase();
         const url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
@@ -431,6 +403,74 @@
             return true;
         }
         return false;
+    }
+
+    // -------------------------------
+    // FILTER FUNCTIONS
+    // -------------------------------
+
+    // Directories filtering (by name)
+    document.getElementById('dirFilter')?.addEventListener('input', filterDirectories);
+    function filterDirectories() {
+        const filter = document.getElementById('dirFilter').value.toLowerCase();
+        const bricks = document.querySelectorAll('#directoriesContainer .brick');
+        bricks.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            brick.style.display = name.includes(filter) ? "" : "none";
+        });
+    }
+
+    // Images filtering (by name and type)
+    document.getElementById('imgFilter')?.addEventListener('input', filterImages);
+    document.getElementById('imgTypeFilter')?.addEventListener('change', filterImages);
+    function filterImages() {
+        const nameFilter = document.getElementById('imgFilter').value.toLowerCase();
+        const typeFilter = document.getElementById('imgTypeFilter').value.toLowerCase();
+        const bricks = document.querySelectorAll('#imagesContainer .brick');
+        bricks.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            const type = brick.getAttribute('data-type');
+            const matchesName = name.includes(nameFilter);
+            const matchesType = typeFilter === "" || type === typeFilter;
+            brick.style.display = (matchesName && matchesType) ? "" : "none";
+        });
+    }
+
+    // Files filtering (by name and type)
+    document.getElementById('fileFilter')?.addEventListener('input', filterFiles);
+    document.getElementById('fileTypeFilter')?.addEventListener('change', filterFiles);
+    function filterFiles() {
+        const nameFilter = document.getElementById('fileFilter').value.toLowerCase();
+        const typeFilter = document.getElementById('fileTypeFilter').value.toLowerCase();
+        const bricks = document.querySelectorAll('#filesContainer .brick');
+        bricks.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            const type = brick.getAttribute('data-type');
+            const matchesName = name.includes(nameFilter);
+            const matchesType = typeFilter === "" || type === typeFilter;
+            brick.style.display = (matchesName && matchesType) ? "" : "none";
+        });
+    }
+
+    // Dynamically populate the file-type dropdown for Files
+    function populateFileTypes() {
+        const bricks = document.querySelectorAll('#filesContainer .brick');
+        const typesSet = new Set();
+        bricks.forEach(brick => {
+            const name = brick.getAttribute('data-name').toLowerCase();
+            if(name.includes('.')) {
+                const ext = name.split('.').pop();
+                typesSet.add(ext);
+            }
+        });
+        const fileTypeFilter = document.getElementById('fileTypeFilter');
+        fileTypeFilter.innerHTML = '<option value="">All Types</option>';
+        typesSet.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.toUpperCase();
+            fileTypeFilter.appendChild(option);
+        });
     }
 </script>
 </body>

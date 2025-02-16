@@ -90,6 +90,10 @@ func main() {
 			BaseDirs = append(BaseDirs, abs)
 		}
 		engine := html.New("./views", ".html")
+		engine.AddFuncMap(map[string]any{
+			"lower": strings.ToLower,
+			"split": strings.Split,
+		})
 		engine.Reload(true)
 		app := fiber.New(fiber.Config{
 			Views: engine,
