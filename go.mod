@@ -7,6 +7,7 @@ require (
 	github.com/gofiber/template/html/v2 v2.1.3
 	github.com/oarkflow/browser v0.0.1
 	github.com/urfave/cli/v2 v2.27.5
+	golang.org/x/crypto v0.29.0
 )
 
 require (

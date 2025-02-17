@@ -76,7 +76,6 @@
         /* Simple tab styling */
         .tab-btn {
             padding: 0.5rem 1rem;
-            border-b-2: solid;
             cursor: pointer;
         }
         .tab-active {
@@ -92,11 +91,19 @@
 <body class="bg-gray-100 text-gray-800">
 <!-- Header -->
 <header class="bg-blue-600 text-white p-4 flex flex-col sm:flex-row sm:justify-between items-center">
-    <!-- Folder Information -->
-    <div>
-        <h1 class="text-2xl font-bold">{{ .Title }}</h1>
-        <p class="text-sm">Shared directory: {{ .BasePath }}</p>
-        <p class="text-sm">Current folder: /{{ .Directory }}</p>
+    <div class="flex flex-col sm:flex-row items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-bold">{{ .Title }}</h1>
+            <p class="text-sm">Shared directory: {{ .BasePath }}</p>
+            <p class="text-sm">Current folder: /{{ .Directory }}</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="text-sm">Welcome, {{ .User }}</span>
+            <a href="/logout" class="bg-red-500 hover:bg-red-700 text-white py-1 px-3 rounded text-sm">Logout</a>
+            {{ if eq .User "admin" }}
+            <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-500 hover:bg-gray-700 text-white py-1 px-3 rounded text-sm">Permissions</a>
+            {{ end }}
+        </div>
     </div>
     <!-- Actions: Upload & New Directory -->
     <div class="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
@@ -217,6 +224,10 @@
                 <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
                 <i class="fas fa-download"></i>
                 </a>
+                <!-- Temporary Link Button -->
+                <a href="javascript:void(0);" onclick="generateTempLinkFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-purple-600 hover:text-purple-800">
+                <i class="fas fa-link"></i>
+                </a>
                 <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
                     <input type="hidden" name="base" value="{{ $.BaseIndex }}">
                     <input type="hidden" name="path" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
@@ -258,6 +269,10 @@
                 </a>
                 <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
                 <i class="fas fa-eye"></i>
+                </a>
+                <!-- Temporary Link Button -->
+                <a href="javascript:void(0);" onclick="generateTempLinkFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-purple-600 hover:text-purple-800">
+                <i class="fas fa-link"></i>
                 </a>
                 <form action="/delete" method="POST" onsubmit="return confirmDelete('file')" class="inline">
                     <input type="hidden" name="base" value="{{ $.BaseIndex }}">
@@ -473,6 +488,32 @@
             document.getElementById('tab-btn-files').classList.remove('tab-inactive');
             document.getElementById('tab-btn-files').classList.add('tab-active');
         }
+    }
+
+    // -------------------------------
+    // TEMPORARY LINK GENERATION FUNCTION
+    // -------------------------------
+    function generateTempLinkFile(baseIndex, filePath) {
+        let expiry = prompt("Enter expiry time (in minutes) for the temporary link:");
+        if (!expiry || isNaN(expiry) || parseInt(expiry) <= 0) {
+            alert("Invalid expiry time.");
+            return;
+        }
+        const formData = new FormData();
+        formData.append("base", baseIndex);
+        formData.append("file", filePath);
+        formData.append("expiry", expiry);
+        fetch('/temp/generate', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.text())
+            .then(text => {
+                prompt("Temporary link (copy it):", text);
+            })
+            .catch(error => {
+                alert("Error generating temporary link: " + error);
+            });
     }
 </script>
 </body>
