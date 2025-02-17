@@ -9,6 +9,17 @@
     <link href="/static/viewer.min.css" rel="stylesheet">
     <script src="/static/tailwind.js"></script>
     <script src="/static/viewer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
+    <script src="/static/viewer-js/docxjs/docx-preview.min.js"></script>
+    <!-- x-spreadsheet stylesheet -->
+    <link rel="stylesheet" href="https://unpkg.com/x-data-spreadsheet/dist/xspreadsheet.css"/>
+    <!-- x-spreadsheet library -->
+    <script src="https://unpkg.com/x-data-spreadsheet/dist/xspreadsheet.js"></script>
+    <script src="/static/viewer-js/sheetjs/xlsxspreadsheet.js"></script>
+    <script src="/static/viewer-js/sheetjs/xlsx.full.min.js"></script>
+
     <style>
         /* Masonry layout for file lists */
         .masonry {
@@ -296,7 +307,7 @@
 <div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
     <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px); width: calc(100vw - 100px)">
         <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
-        <div id="previewContent" class="p-4 h-full"></div>
+        <div id="previewContent" class="p-4 h-full max-h-fit overflow-y-auto"></div>
     </div>
 </div>
 
@@ -340,6 +351,21 @@
         document.getElementById('globalTypeFilter').addEventListener('change', applyGlobalFilter);
     });
 
+    async function fetchFile(url, asArrayBuffer = false) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            if (asArrayBuffer) {
+                return await response.arrayBuffer();
+            }
+            return await response.blob();
+        } catch (error) {
+            console.error('Error fetching file:', error);
+        }
+    }
+
     function previewFile(base, file) {
         const ext = file.split('.').pop().toLowerCase();
         let url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
@@ -348,6 +374,8 @@
             content = `<img src="${url}" class="w-full h-auto rounded" />`;
             showPreview(content);
         } else if (plainText.includes(ext)) {
+            const el = document.getElementById("previewContent")
+            el.innerText = ""
             fetch(url)
                 .then(response => response.text())
                 .then(text => {
@@ -363,6 +391,31 @@
         } else if (['mp3', 'wav'].includes(ext)) {
             content = `<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`;
             showPreview(content);
+        } else if (['docx'].includes(ext)) {
+            const previewContent = document.getElementById('previewContent');
+            previewContent.innerHTML = "";
+            (async () => {
+                url = "http://" + host + url
+                const blob = await fetchFile(url);
+                // synchronously rendering function
+                docx.renderSync(blob, document.getElementById("previewContent"))
+                    .then(wordDocument => {
+                        const modal = document.getElementById('previewModal');
+                        modal.classList.remove('hidden');
+                        console.log("docx document object", wordDocument);
+                    });
+            })();
+        } else if (['xlsx'].includes(ext)) {
+            const previewContent = document.getElementById('previewContent');
+            previewContent.innerHTML = "";
+            (async () => {
+                url = "http://" + host + url
+                const blob = await fetchFile(url, true);
+                const grid = x_spreadsheet(document.getElementById("previewContent"));
+                grid.loadData(stox(XLSX.read(blob)));
+                const modal = document.getElementById('previewModal');
+                modal.classList.remove('hidden');
+            })();
         } else {
             url = "http://" + host + url
             content = `<iframe src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
