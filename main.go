@@ -440,6 +440,12 @@ func main() {
 		app := fiber.New(fiber.Config{
 			Views: engine,
 		})
+		static := fiber.New()
+		static.Use(cors.New())
+		static.Static("/", "./static/viewer-js")
+		go func() {
+			_ = static.Listen(":8081")
+		}()
 		app.Use(cors.New())
 		// Load session user (if any) and enforce authentication.
 		app.Use(loadUser)

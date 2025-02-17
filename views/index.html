@@ -304,6 +304,7 @@
 <div id="toast" class="toast"></div>
 
 <script>
+    const host = document.location.host
     // -------------------------------
     // UPLOAD & PREVIEW CODE (unchanged)
     // -------------------------------
@@ -341,7 +342,7 @@
 
     function previewFile(base, file) {
         const ext = file.split('.').pop().toLowerCase();
-        const url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
+        let url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
         let content = '';
         if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
             content = `<img src="${url}" class="w-full h-auto rounded" />`;
@@ -356,9 +357,6 @@
                 .catch(error => {
                     showPreview("Error loading file.");
                 });
-        } else if (ext === 'pdf') {
-            content = `<embed src="${url}" type="application/pdf" class="w-full h-full rounded" />`;
-            showPreview(content);
         } else if (['mp4', 'webm'].includes(ext)) {
             content = `<video controls class="w-full rounded" id="videoPreview"><source src="${url}" type="video/${ext}">Your browser does not support the video tag.</video>`;
             showPreview(content);
@@ -366,7 +364,10 @@
             content = `<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`;
             showPreview(content);
         } else {
-            showPreview("Preview not available for this file type.");
+            url = "http://" + host + url
+            console.log(url)
+            content = `<embed src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
+            showPreview(content);
         }
     }
     function showPreview(content) {
