@@ -365,8 +365,7 @@
             showPreview(content);
         } else {
             url = "http://" + host + url
-            console.log(url)
-            content = `<embed src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
+            content = `<iframe src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
             showPreview(content);
         }
     }

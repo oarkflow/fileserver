@@ -4,10 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"log"
 	"math"
-	"mime/multipart"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,11 +20,10 @@ import (
 	"github.com/oarkflow/browser"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/bcrypt"
-)
 
-// =============================================================================
-// Shared Types used for Templating
-// =============================================================================
+	"github.com/oarkflow/filebrowser/filesystem"
+	"github.com/oarkflow/filebrowser/filesystem/local"
+)
 
 type File struct {
 	Name string
@@ -72,33 +69,20 @@ type DashboardItem struct {
 	Path  string
 }
 
-// =============================================================================
-// User and ACL Types
-// =============================================================================
-
-// User represents an authenticated user.
 type User struct {
 	Username     string
-	PasswordHash string // stored as bcrypt hash
-	Role         string // "admin", "editor", "viewer"
+	PasswordHash string
+	Role         string
 }
 
-// ACL is a global per‑path access control list. For each path you can set
-// which user (by username) is allowed which actions (e.g. "view", "edit", "delete", "upload", "create").
 var ACL = make(map[string]map[string][]string)
 
-// Global user map (for demo purposes only)
 var users = map[string]*User{
 	"admin":  {Username: "admin", PasswordHash: hashPassword("admin"), Role: "admin"},
 	"editor": {Username: "editor", PasswordHash: hashPassword("editor"), Role: "editor"},
 	"viewer": {Username: "viewer", PasswordHash: hashPassword("viewer"), Role: "viewer"},
 }
 
-// =============================================================================
-// Temporary Link Types
-// =============================================================================
-
-// TemporaryLink represents a temporary URL for a file.
 type TemporaryLink struct {
 	Token     string
 	BaseIndex int
@@ -108,147 +92,7 @@ type TemporaryLink struct {
 
 var tempLinks = make(map[string]TemporaryLink)
 
-// =============================================================================
-// FileStorage Interface and FileInfo (unchanged)
-// =============================================================================
-
-type FileStorage interface {
-	// ListDir returns the list of files in the given (relative) directory.
-	ListDir(path string) ([]FileInfo, error)
-	// ReadFile returns the entire content of the file at the given (relative) path.
-	ReadFile(path string) ([]byte, error)
-	// WriteFile writes the content to the file at the given (relative) path.
-	WriteFile(path string, content []byte) error
-	// Remove deletes the file or directory at the given (relative) path.
-	Remove(path string) error
-	// Rename renames a file or directory.
-	Rename(oldPath, newPath string) error
-	// CreateDir creates a directory at the given (relative) path.
-	CreateDir(path string) error
-	// SaveUploadedFile saves an uploaded file to the given (relative) path.
-	SaveUploadedFile(path string, file *multipart.FileHeader) error
-	// BasePath returns the storage’s base path or identifier.
-	BasePath() string
-}
-
-type FileInfo struct {
-	Name    string
-	Size    int64
-	Mode    os.FileMode
-	ModTime time.Time
-	IsDir   bool
-}
-
-// =============================================================================
-// LocalStorage Implementation (unchanged)
-// =============================================================================
-
-type LocalStorage struct {
-	basePath string
-}
-
-func NewLocalStorage(base string) *LocalStorage {
-	abs, err := filepath.Abs(base)
-	if err != nil {
-		log.Fatalf("Error resolving base path %s: %v", base, err)
-	}
-	stat, err := os.Stat(abs)
-	if err != nil || !stat.IsDir() {
-		log.Fatalf("%s is not a valid directory", abs)
-	}
-	return &LocalStorage{basePath: abs}
-}
-
-func (ls *LocalStorage) resolvePath(path string) string {
-	return filepath.Join(ls.basePath, path)
-}
-
-func (ls *LocalStorage) BasePath() string {
-	return ls.basePath
-}
-
-func (ls *LocalStorage) ListDir(path string) ([]FileInfo, error) {
-	fullPath := ls.resolvePath(path)
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	var infos []FileInfo
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		infos = append(infos, FileInfo{
-			Name:    entry.Name(),
-			Size:    info.Size(),
-			Mode:    info.Mode(),
-			ModTime: info.ModTime(),
-			IsDir:   info.IsDir(),
-		})
-	}
-	return infos, nil
-}
-
-func (ls *LocalStorage) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(ls.resolvePath(path))
-}
-
-func (ls *LocalStorage) WriteFile(path string, content []byte) error {
-	fullPath := ls.resolvePath(path)
-	return os.WriteFile(fullPath, content, 0644)
-}
-
-func (ls *LocalStorage) Remove(path string) error {
-	fullPath := ls.resolvePath(path)
-	fi, err := os.Stat(fullPath)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		return os.RemoveAll(fullPath)
-	}
-	return os.Remove(fullPath)
-}
-
-func (ls *LocalStorage) Rename(oldPath, newPath string) error {
-	return os.Rename(ls.resolvePath(oldPath), ls.resolvePath(newPath))
-}
-
-func (ls *LocalStorage) CreateDir(path string) error {
-	return os.Mkdir(ls.resolvePath(path), 0755)
-}
-
-func (ls *LocalStorage) SaveUploadedFile(path string, file *multipart.FileHeader) error {
-	src, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-	fullPath := ls.resolvePath(path)
-	// Ensure target directory exists.
-	err = os.MkdirAll(filepath.Dir(fullPath), 0755)
-	if err != nil {
-		return err
-	}
-	dst, err := os.Create(fullPath)
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
-	_, err = io.Copy(dst, src)
-	return err
-}
-
-// =============================================================================
-// Global Storages Slice (unchanged)
-// =============================================================================
-
-var Storages []FileStorage
-
-// =============================================================================
-// Helper Functions for Templating and File Details (unchanged)
-// =============================================================================
+var Storages []filesystem.Storage
 
 var imageTypes = []string{".png", ".jpg", ".jpeg", ".gif", ".svg"}
 
@@ -271,7 +115,7 @@ func humanSize(size int64) string {
 	return fmt.Sprintf("%.1f %s", float64(size)/math.Pow(1024, float64(i)), sizes[i])
 }
 
-func getAllFiles(fs FileStorage, dir string) (AllFiles, error) {
+func getAllFiles(fs filesystem.Storage, dir string) (AllFiles, error) {
 	var allFiles AllFiles
 	entries, err := fs.ListDir(dir)
 	if err != nil {
@@ -295,10 +139,6 @@ func getAllFiles(fs FileStorage, dir string) (AllFiles, error) {
 	return allFiles, nil
 }
 
-// =============================================================================
-// Password Hashing Helpers
-// =============================================================================
-
 func hashPassword(pwd string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
@@ -307,11 +147,6 @@ func hashPassword(pwd string) string {
 	return string(hash)
 }
 
-// =============================================================================
-// Permission Checking Helpers
-// =============================================================================
-
-// defaultPermission returns whether a role is allowed to perform a given action.
 func defaultPermission(role, action string) bool {
 	switch role {
 	case "admin":
@@ -327,12 +162,11 @@ func defaultPermission(role, action string) bool {
 	return false
 }
 
-// checkPermission checks whether the given user is allowed to perform the action on the path.
 func checkPermission(user *User, path, action string) bool {
 	if user.Role == "admin" {
 		return true
 	}
-	// Look for the longest ACL match.
+
 	var matched string
 	for aclPath := range ACL {
 		if strings.HasPrefix(path, aclPath) && len(aclPath) > len(matched) {
@@ -353,13 +187,8 @@ func checkPermission(user *User, path, action string) bool {
 	return defaultPermission(user.Role, action)
 }
 
-// =============================================================================
-// Session and Authentication Middleware
-// =============================================================================
-
 var store = fiberSession.New()
 
-// loadUser loads the user from the session (if present) and stores it in c.Locals.
 func loadUser(c *fiber.Ctx) error {
 	sess, err := store.Get(c)
 	if err != nil {
@@ -374,10 +203,9 @@ func loadUser(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// requireAuth is a middleware that forces a logged-in user.
 func requireAuth(c *fiber.Ctx) error {
-	// Allow public endpoints.
-	if c.Path() == "/login" || c.Path() == "/temp" {
+
+	if c.Path() == "/login" || c.Path() == "/temp" || c.Path() == "/get" {
 		return c.Next()
 	}
 	user := c.Locals("user")
@@ -387,10 +215,6 @@ func requireAuth(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// =============================================================================
-// Temporary Link Helpers
-// =============================================================================
-
 func generateToken(length int) (string, error) {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {
@@ -398,10 +222,6 @@ func generateToken(length int) (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
-
-// =============================================================================
-// Main and Route Handlers
-// =============================================================================
 
 func main() {
 	appCLI := cli.NewApp()
@@ -411,20 +231,21 @@ func main() {
 	appCLI.Flags = []cli.Flag{
 		&cli.StringFlag{Name: "ip", Aliases: []string{"i"}, Value: "0.0.0.0", Usage: "IP address to serve on"},
 		&cli.StringFlag{Name: "port", Aliases: []string{"p"}, Value: "8080", Usage: "Port to listen on"},
+		&cli.StringFlag{Name: "viewer-port", Aliases: []string{"vp"}, Value: "8081", Usage: "Port to listen viewer on"},
 	}
 	appCLI.Action = func(c *cli.Context) error {
-		ip, port := c.String("ip"), c.String("port")
+		ip, port, viewerPort := c.String("ip"), c.String("port"), c.String("viewer-port")
 		if c.NArg() == 0 {
 			cli.ShowAppHelpAndExit(c, 1)
 		}
 		args := c.Args().Slice()
 		for _, p := range args {
-			// For now we assume a local storage.
-			storage := NewLocalStorage(p)
+
+			storage := local.NewStorage(p)
 			Storages = append(Storages, storage)
 		}
 		engine := html.New("./views", ".html")
-		// Add helper functions to the template engine.
+
 		engine.AddFuncMap(map[string]interface{}{
 			"lower": strings.ToLower,
 			"split": func(s, sep string) []string {
@@ -443,13 +264,11 @@ func main() {
 		static := fiber.New()
 		static.Use(cors.New())
 		static.Static("/", "./static/viewer-js")
+		url := fmt.Sprintf("%s:%s", ip, viewerPort)
 		go func() {
-			_ = static.Listen(":8081")
+			_ = static.Listen(url)
 		}()
 		app.Use(cors.New())
-		// Load session user (if any) and enforce authentication.
-		app.Use(loadUser)
-		app.Use(requireAuth)
 		app.Static("/static", "./static", fiber.Static{
 			Compress:  true,
 			ByteRange: true,
@@ -458,8 +277,11 @@ func main() {
 			Compress:  true,
 			ByteRange: true,
 		})
+
+		app.Use(loadUser)
+		app.Use(requireAuth)
 		setupRoutes(app)
-		url := fmt.Sprintf("%s:%s", ip, port)
+		url = fmt.Sprintf("%s:%s", ip, port)
 		log.Printf("\nServing on: http://%s\n", url)
 		if !isSudo() {
 			_ = browser.OpenURL("http://" + url)
@@ -471,13 +293,10 @@ func main() {
 }
 
 func setupRoutes(app *fiber.App) {
-	// Public endpoints (login, temp link access)
 	app.Get("/login", loginPage)
 	app.Post("/login", loginPost)
 	app.Get("/logout", logout)
 	app.Get("/temp", tempLinkAccess)
-
-	// Endpoints that require a user session:
 	app.Get("/", dashboard)
 	app.Get("/view", viewDir)
 	app.Get("/get", getFile)
@@ -487,34 +306,19 @@ func setupRoutes(app *fiber.App) {
 	app.Post("/mkdir", makeDir)
 	app.Get("/edit", editFile)
 	app.Post("/save", saveFile)
-	// Temporary link generation endpoint.
 	app.Post("/temp/generate", generateTemp)
-
-	// -------------------------------
-	// New endpoints for ACL Management
-	// -------------------------------
-	app.Get("/permissions", viewPermissions)    // View current ACL for a given path (query parameter "path")
-	app.Post("/permissions", updatePermissions) // Update ACL for a given path
-
-	// -------------------------------
-	// New endpoints for Sharing UI
-	// -------------------------------
-	app.Get("/share", sharePage)  // Display sharing options for a file (query parameter "file")
-	app.Post("/share", sharePost) // Generate a new temporary share link
+	app.Get("/permissions", viewPermissions)
+	app.Post("/permissions", updatePermissions)
+	app.Get("/share", sharePage)
+	app.Post("/share", sharePost)
 }
 
-// -------------------------------
-// Authentication Endpoints
-// -------------------------------
-
-// loginPage renders the login page.
 func loginPage(c *fiber.Ctx) error {
 	return c.Render("login", fiber.Map{
 		"Title": "Login",
 	})
 }
 
-// loginPost processes the login form submission.
 func loginPost(c *fiber.Ctx) error {
 	username := c.FormValue("username")
 	password := c.FormValue("password")
@@ -522,12 +326,11 @@ func loginPost(c *fiber.Ctx) error {
 	if !exists {
 		return c.Status(fiber.StatusUnauthorized).SendString("Invalid username or password")
 	}
-	// Compare the provided password with the stored hash.
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return c.Status(fiber.StatusUnauthorized).SendString("Invalid username or password")
 	}
 
-	// Save the user in session.
 	sess, err := store.Get(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Session error")
@@ -539,22 +342,16 @@ func loginPost(c *fiber.Ctx) error {
 	return c.Redirect("/")
 }
 
-// logout destroys the user session and redirects to the login page.
 func logout(c *fiber.Ctx) error {
 	sess, err := store.Get(c)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Session error")
 	}
-	// Destroy the session.
+
 	sess.Destroy()
 	return c.Redirect("/login")
 }
 
-// -------------------------------
-// Temporary Link Endpoints
-// -------------------------------
-
-// generateTemp creates a temporary link for a file with a specified expiry (in minutes).
 func generateTemp(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
 	baseIndexStr := c.FormValue("base")
@@ -568,7 +365,7 @@ func generateTemp(c *fiber.Ctx) error {
 	if err != nil || expiryMinutes <= 0 {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid expiry time")
 	}
-	// Check that the user has view permission for the file.
+
 	if !checkPermission(user, filePath, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
@@ -586,7 +383,6 @@ func generateTemp(c *fiber.Ctx) error {
 	return c.SendString(link)
 }
 
-// tempLinkAccess serves a file via a temporary link.
 func tempLinkAccess(c *fiber.Ctx) error {
 	token := c.Query("token")
 	link, exists := tempLinks[token]
@@ -594,19 +390,15 @@ func tempLinkAccess(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Temporary link expired or not found")
 	}
 	storage := Storages[link.BaseIndex]
-	content, err := storage.ReadFile(link.FilePath)
+	content, _, err := storage.ReadFile(link.FilePath)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
 	}
 	return c.Send(content)
 }
 
-// -------------------------------
-// File Management Endpoints (view, upload, etc.)
-// -------------------------------
-
 func dashboard(c *fiber.Ctx) error {
-	// If only one storage, redirect to its view.
+
 	if len(Storages) == 1 {
 		return c.Redirect(fmt.Sprintf("/view?base=0"))
 	}
@@ -628,7 +420,7 @@ func viewDir(c *fiber.Ctx) error {
 		return c.Redirect("/")
 	}
 	dirParam := c.Query("dir", "")
-	// Check permission on the directory (for "view")
+
 	if !checkPermission(user, dirParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
@@ -659,20 +451,25 @@ func viewDir(c *fiber.Ctx) error {
 }
 
 func getFile(c *fiber.Ctx) error {
-	user := c.Locals("user").(*User)
+	user, ok := c.Locals("user").(*User)
 	baseIndex, err := strconv.Atoi(c.Query("base"))
 	if err != nil || baseIndex < 0 || baseIndex >= len(Storages) {
 		return c.Redirect("/")
 	}
 	fileParam := c.Query("file")
-	if !checkPermission(user, fileParam, "view") {
+	if !ok {
+		fmt.Println("User not found")
+	}
+	if user != nil && !checkPermission(user, fileParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
 	storage := Storages[baseIndex]
-	content, err := storage.ReadFile(fileParam)
+	content, mimeType, err := storage.ReadFile(fileParam)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
 	}
+
+	c.Set("Content-Type", mimeType)
 	return c.Send(content)
 }
 
@@ -732,7 +529,7 @@ func makeDir(c *fiber.Ctx) error {
 	if newDirName == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("Directory name required")
 	}
-	// Check permission on the parent directory for "create"
+
 	if !checkPermission(user, dirParam, "create") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
@@ -786,7 +583,7 @@ func editFile(c *fiber.Ctx) error {
 	if !slices.Contains(plainText, ext) {
 		return c.Status(fiber.StatusBadRequest).SendString("Editing not supported for this file type")
 	}
-	content, err := storage.ReadFile(fileParam)
+	content, _, err := storage.ReadFile(fileParam)
 	if err != nil {
 		return err
 	}
@@ -835,12 +632,6 @@ var plainText = []string{
 	"vbs", "fs", "d", "as", "groovy", "hbs", "mustache",
 }
 
-// -------------------------------
-// New Endpoints for ACL Management UI
-// -------------------------------
-
-// viewPermissions renders a page showing current ACL for a given path.
-// Only admin can view and manage permissions.
 func viewPermissions(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
 	if user.Role != "admin" {
@@ -858,7 +649,6 @@ func viewPermissions(c *fiber.Ctx) error {
 	})
 }
 
-// updatePermissions updates the ACL for a given path.
 func updatePermissions(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
 	if user.Role != "admin" {
@@ -866,7 +656,7 @@ func updatePermissions(c *fiber.Ctx) error {
 	}
 	path := c.FormValue("path")
 	username := c.FormValue("username")
-	actions := c.FormValue("actions") // comma-separated list
+	actions := c.FormValue("actions")
 	if path == "" || username == "" || actions == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("Missing parameters")
 	}
@@ -881,14 +671,9 @@ func updatePermissions(c *fiber.Ctx) error {
 	return c.Redirect("/permissions?path=" + path)
 }
 
-// -------------------------------
-// New Endpoints for File and Folder Sharing UI
-// -------------------------------
-
-// sharePage displays a page with current share links for a file and a form to create new ones.
 func sharePage(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
-	// For sharing, allow admin and editor roles.
+
 	if user.Role != "admin" && user.Role != "editor" {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied for sharing")
 	}
@@ -910,7 +695,6 @@ func sharePage(c *fiber.Ctx) error {
 	})
 }
 
-// sharePost processes the share form and generates a new temporary link.
 func sharePost(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
 	if user.Role != "admin" && user.Role != "editor" {
@@ -927,7 +711,7 @@ func sharePost(c *fiber.Ctx) error {
 	if err != nil || expiryMinutes <= 0 {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid expiry time")
 	}
-	// Check that the user has view permission for the file.
+
 	if !checkPermission(user, fileParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
