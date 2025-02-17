@@ -94,7 +94,9 @@
     <div class="flex flex-col sm:flex-row items-center gap-4">
         <div>
             <h1 class="text-2xl font-bold">{{ .Title }}</h1>
-            <p class="text-sm">Shared directory: {{ .BasePath }}</p>
+            <p class="text-sm">
+                <span>Shared directory: {{ .BasePath }}</span>
+            </p>
             <p class="text-sm">Current folder: /{{ .Directory }}</p>
         </div>
         <div class="flex items-center gap-4">
@@ -103,6 +105,7 @@
             {{ if eq .User "admin" }}
             <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-500 hover:bg-gray-700 text-white py-1 px-3 rounded text-sm">Permissions</a>
             {{ end }}
+            <span><a href="/"><i class="fa fa-home"></i> Dashboard</a></span>
         </div>
     </div>
     <!-- Actions: Upload & New Directory -->

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{.Title}}</title>
+</head>
+<body>
+<h1>Permissions for {{.Path}}</h1>
+{{if .Permissions}}
+<h2>Current ACL</h2>
+<table border="1">
+    <tr>
+        <th>Username</th>
+        <th>Actions</th>
+    </tr>
+    {{range $username, $actions := .Permissions}}
+    <tr>
+        <td>{{$username}}</td>
+        <td>{{join $actions ", "}}</td>
+    </tr>
+    {{end}}
+</table>
+{{else}}
+<p>No permissions set for this path.</p>
+{{end}}
+<h2>Set/Update Permission</h2>
+<form method="POST" action="/permissions">
+    <input type="hidden" name="path" value="{{.Path}}">
+    <label>Username: <input type="text" name="username"></label><br>
+    <label>Actions (comma separated, e.g., view,edit,delete): <input type="text" name="actions"></label><br>
+    <input type="submit" value="Set Permission">
+</form>
+<p><a href="/">Back to Dashboard</a></p>
+</body>
+</html>
