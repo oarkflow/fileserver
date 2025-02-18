@@ -559,7 +559,7 @@
         formData.append("base", baseIndex);
         formData.append("file", filePath);
         formData.append("expiry", expiry);
-        fetch('/temp/generate', {
+        fetch('/temporary', {
             method: 'POST',
             body: formData
         })

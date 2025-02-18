@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -160,14 +158,6 @@ func (m *Manager) checkPermission(user *User, path, action string) bool {
 	return m.defaultPermission(user.Role, action)
 }
 
-func (m *Manager) generateToken(length int) (string, error) {
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
 func (m *Manager) generateTemp(c *fiber.Ctx) error {
 	user := c.Locals("user").(*User)
 	baseIndexStr := c.FormValue("base")
@@ -185,7 +175,7 @@ func (m *Manager) generateTemp(c *fiber.Ctx) error {
 	if !m.checkPermission(user, filePath, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	token, err := m.generateToken(16)
+	token, err := utils.GenerateToken(16)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Error generating token")
 	}
@@ -195,7 +185,7 @@ func (m *Manager) generateTemp(c *fiber.Ctx) error {
 		FilePath:  filePath,
 		Expiry:    time.Now().Add(time.Duration(expiryMinutes) * time.Minute),
 	}
-	link := fmt.Sprintf("%s/temp?token=%s", c.BaseURL(), token)
+	link := fmt.Sprintf("%s/temporary?token=%s", c.BaseURL(), token)
 	return c.SendString(link)
 }
 
@@ -206,10 +196,11 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Temporary link expired or not found")
 	}
 	storage := m.storages[link.BaseIndex]
-	content, _, err := storage.ReadFile(link.FilePath)
+	content, contentType, err := storage.ReadFile(link.FilePath)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
 	}
+	c.Set("Content-Type", contentType)
 	return c.Send(content)
 }
 
@@ -508,7 +499,7 @@ func (m *Manager) sharePost(c *fiber.Ctx) error {
 	if !m.checkPermission(user, fileParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	token, err := m.generateToken(16)
+	token, err := utils.GenerateToken(16)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Error generating token")
 	}
@@ -526,7 +517,7 @@ func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Post("/login", auth.loginPost)
 	app.Get("/logout", auth.logout)
 
-	app.Get("/temp", m.tempLinkAccess)
+	app.Get("/temporary", m.tempLinkAccess)
 	app.Get("/", m.dashboard)
 	app.Get("/view", m.viewDir)
 	app.Get("/get", m.getFile)
@@ -536,7 +527,7 @@ func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Post("/mkdir", m.makeDir)
 	app.Get("/edit", m.editFile)
 	app.Post("/save", m.saveFile)
-	app.Post("/temp/generate", m.generateTemp)
+	app.Post("/temporary", m.generateTemp)
 	app.Get("/permissions", m.viewPermissions)
 	app.Post("/permissions", m.updatePermissions)
 	app.Get("/share", m.sharePage)
@@ -564,7 +555,7 @@ func (a *AuthManager) loadUser(c *fiber.Ctx) error {
 
 func (a *AuthManager) requireAuth(c *fiber.Ctx) error {
 	path := c.Path()
-	if path == "/login" || path == "/temp" || path == "/get" {
+	if path == "/login" || (path == "/temporary" && c.Method() == "GET") {
 		return c.Next()
 	}
 	user := c.Locals("user")

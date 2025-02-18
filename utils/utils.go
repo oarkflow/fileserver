@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math"
@@ -23,6 +25,14 @@ var PlainText = []string{
 	"zsh", "bat", "pl", "perl", "lua", "r", "sql", "json5", "yml",
 	"c", "cpp", "dart", "m", "rs", "v", "clj", "el", "kt", "coffee",
 	"vbs", "fs", "d", "as", "groovy", "hbs", "mustache",
+}
+
+func GenerateToken(length int) (string, error) {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func IsSudo() bool {
