@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/template/html/v2"
+	"github.com/urfave/cli/v2"
 	"html/template"
 	"io"
 	"log"
@@ -14,11 +17,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberSession "github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/gofiber/template/html/v2"
-	"github.com/oarkflow/browser"
-	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/oarkflow/filebrowser/filesystem"
@@ -26,9 +25,118 @@ import (
 	"github.com/oarkflow/filebrowser/utils"
 )
 
+func main() {
+	appCLI := cli.NewApp()
+	appCLI.Name = "fs"
+	appCLI.Usage = "Serve one or more storage backends via an HTTP file manager"
+	appCLI.Version = "fs server 0.3.0 with auth, permissions & sharing"
+	appCLI.Flags = []cli.Flag{
+		&cli.StringFlag{Name: "ip", Aliases: []string{"i"}, Value: "0.0.0.0", Usage: "IP address to serve on"},
+		&cli.StringFlag{Name: "port", Aliases: []string{"p"}, Value: "8080", Usage: "Port to listen on"},
+		&cli.StringFlag{Name: "viewer-port", Aliases: []string{"vp"}, Value: "8081", Usage: "Port to listen viewer on"},
+	}
+	appCLI.Action = func(c *cli.Context) error {
+		ip, port, viewerPort := c.String("ip"), c.String("port"), c.String("viewer-port")
+		args := c.Args().Slice()
+		manager := &Manager{
+			acl:       make(map[string]map[string][]string),
+			users:     make(map[string]*User),
+			tempLinks: make(map[string]TemporaryLink),
+			storages:  []StorageItem{},
+			uploads:   make(map[string]*UploadSession),
+		}
+
+		manager.users["admin"] = NewUser("admin", "admin", "admin")
+		manager.users["editor"] = NewUser("editor", "editor", "editor")
+		manager.users["viewer"] = NewUser("viewer", "viewer", "viewer")
+
+		for _, p := range args {
+			cfg := StorageConfig{Type: "local", Path: p}
+			item := StorageItem{Storage: local.NewStorage(p), Config: cfg}
+			manager.storages = append(manager.storages, item)
+		}
+
+		const configFile = "storages.json"
+		configs, err := loadStorageConfigs(configFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Printf("No storages.json found, starting with no storages")
+				configs = []StorageConfig{}
+			} else {
+				return err
+			}
+		}
+		for _, cfg := range configs {
+			item := StorageItem{Storage: newStorageFromConfig(cfg), Config: cfg}
+			manager.storages = append(manager.storages, item)
+		}
+
+		engine := html.New("./views", ".html")
+		engine.AddFuncMap(map[string]interface{}{
+			"lower": strings.ToLower,
+			"unescape": func(s string) template.HTML {
+				return template.HTML(s)
+			},
+			"split": func(s, sep string) []string {
+				parts := strings.Split(s, sep)
+				if len(parts) == 1 {
+					parts = append(parts, "na")
+				}
+				return parts
+			},
+			"join": strings.Join,
+		})
+		engine.Reload(true)
+		app := fiber.New(fiber.Config{
+			Views:     engine,
+			BodyLimit: 400 * 1024 * 1024,
+		})
+		static := fiber.New()
+		static.Use(cors.New())
+		static.Static("/", "./static/viewer-js")
+		staticUrl := fmt.Sprintf("%s:%s", ip, viewerPort)
+		go func() {
+			_ = static.Listen(staticUrl)
+		}()
+		app.Use(cors.New())
+		app.Static("/static", "./static", fiber.Static{
+			Compress:  true,
+			ByteRange: true,
+		})
+		app.Static("/webfonts", "./webfonts", fiber.Static{
+			Compress:  true,
+			ByteRange: true,
+		})
+		authManager := &AuthManager{
+			Store:   fiberSession.New(),
+			Manager: manager,
+		}
+		app.Use(authManager.loadUser)
+		app.Use(authManager.requireAuth)
+		manager.SetupRoutes(app, authManager)
+		url := fmt.Sprintf("%s:%s", ip, port)
+		log.Printf("\nServing on: http://%s\n", url)
+		log.Fatal(app.Listen(url))
+		return nil
+	}
+	log.Fatal(appCLI.Run(os.Args))
+}
+
 type StorageConfig struct {
-	Type string `json:"type"`
-	Path string `json:"path"`
+	Type       string `json:"type"`
+	Path       string `json:"path"`
+	IsAbsolute bool   `json:"is_absolute"`
+}
+
+func (s StorageConfig) AbsolutePath() string {
+	if s.IsAbsolute {
+		return s.Path
+	}
+	path, err := filepath.Abs(s.Path)
+	if err != nil {
+		return s.Path
+	}
+	return path
 }
 
 func loadStorageConfigs(filename string) ([]StorageConfig, error) {
@@ -255,14 +363,13 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 }
 
 func (m *Manager) dashboard(c *fiber.Ctx) error {
-
 	grouped := make(map[string][]DashboardItem)
 	for i, item := range m.storages {
 		fsType := item.Config.Type
 		dItem := DashboardItem{
 			Index: i,
-			Path:  item.Config.Path,
 		}
+		dItem.Path = item.Config.AbsolutePath()
 		grouped[fsType] = append(grouped[fsType], dItem)
 	}
 	ctx := DashboardContext{
@@ -587,6 +694,7 @@ func (m *Manager) addStorage(c *fiber.Ctx) error {
 	if fsType == "" {
 		fsType = "local"
 	}
+	isAbs := filepath.IsAbs(path)
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid path")
@@ -598,8 +706,7 @@ func (m *Manager) addStorage(c *fiber.Ctx) error {
 			}
 		}
 	}
-
-	cfg := StorageConfig{Type: fsType, Path: absPath}
+	cfg := StorageConfig{Type: fsType, Path: path, IsAbsolute: isAbs}
 	newFS := newStorageFromConfig(cfg)
 	item := StorageItem{Storage: newFS, Config: cfg}
 	m.storages = append(m.storages, item)
@@ -816,104 +923,4 @@ func (a *AuthManager) logout(c *fiber.Ctx) error {
 	}
 	sess.Destroy()
 	return c.Redirect("/login")
-}
-
-func main() {
-	appCLI := cli.NewApp()
-	appCLI.Name = "fs"
-	appCLI.Usage = "Serve one or more storage backends via an HTTP file manager"
-	appCLI.Version = "fs server 0.3.0 with auth, permissions & sharing"
-	appCLI.Flags = []cli.Flag{
-		&cli.StringFlag{Name: "ip", Aliases: []string{"i"}, Value: "0.0.0.0", Usage: "IP address to serve on"},
-		&cli.StringFlag{Name: "port", Aliases: []string{"p"}, Value: "8080", Usage: "Port to listen on"},
-		&cli.StringFlag{Name: "viewer-port", Aliases: []string{"vp"}, Value: "8081", Usage: "Port to listen viewer on"},
-	}
-	appCLI.Action = func(c *cli.Context) error {
-		ip, port, viewerPort := c.String("ip"), c.String("port"), c.String("viewer-port")
-		args := c.Args().Slice()
-		manager := &Manager{
-			acl:       make(map[string]map[string][]string),
-			users:     make(map[string]*User),
-			tempLinks: make(map[string]TemporaryLink),
-			storages:  []StorageItem{},
-			uploads:   make(map[string]*UploadSession),
-		}
-
-		manager.users["admin"] = NewUser("admin", "admin", "admin")
-		manager.users["editor"] = NewUser("editor", "editor", "editor")
-		manager.users["viewer"] = NewUser("viewer", "viewer", "viewer")
-
-		for _, p := range args {
-			cfg := StorageConfig{Type: "local", Path: p}
-			item := StorageItem{Storage: local.NewStorage(p), Config: cfg}
-			manager.storages = append(manager.storages, item)
-		}
-
-		const configFile = "storages.json"
-		configs, err := loadStorageConfigs(configFile)
-		if err != nil {
-			if os.IsNotExist(err) {
-				log.Printf("No storages.json found, starting with no storages")
-				configs = []StorageConfig{}
-			} else {
-				return err
-			}
-		}
-		for _, cfg := range configs {
-			item := StorageItem{Storage: newStorageFromConfig(cfg), Config: cfg}
-			manager.storages = append(manager.storages, item)
-		}
-
-		engine := html.New("./views", ".html")
-		engine.AddFuncMap(map[string]interface{}{
-			"lower": strings.ToLower,
-			"unescape": func(s string) template.HTML {
-				return template.HTML(s)
-			},
-			"split": func(s, sep string) []string {
-				parts := strings.Split(s, sep)
-				if len(parts) == 1 {
-					parts = append(parts, "na")
-				}
-				return parts
-			},
-			"join": strings.Join,
-		})
-		engine.Reload(true)
-		app := fiber.New(fiber.Config{
-			Views:     engine,
-			BodyLimit: 400 * 1024 * 1024,
-		})
-		static := fiber.New()
-		static.Use(cors.New())
-		static.Static("/", "./static/viewer-js")
-		url := fmt.Sprintf("%s:%s", ip, viewerPort)
-		go func() {
-			_ = static.Listen(url)
-		}()
-		app.Use(cors.New())
-		app.Static("/static", "./static", fiber.Static{
-			Compress:  true,
-			ByteRange: true,
-		})
-		app.Static("/webfonts", "./webfonts", fiber.Static{
-			Compress:  true,
-			ByteRange: true,
-		})
-		authManager := &AuthManager{
-			Store:   fiberSession.New(),
-			Manager: manager,
-		}
-		app.Use(authManager.loadUser)
-		app.Use(authManager.requireAuth)
-		manager.SetupRoutes(app, authManager)
-		url = fmt.Sprintf("%s:%s", ip, port)
-		log.Printf("\nServing on: http://%s\n", url)
-		if !utils.IsSudo() {
-			_ = browser.OpenURL("http://" + url)
-		}
-		log.Fatal(app.Listen(url))
-		return nil
-	}
-	log.Fatal(appCLI.Run(os.Args))
 }
