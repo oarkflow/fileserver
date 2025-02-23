@@ -1,5 +1,6 @@
 [
   {
-    "path": "./storage"
+    "type": "local",
+    "path": "/Users/sujit/Sites/fileserver/uploads"
   }
 ]
