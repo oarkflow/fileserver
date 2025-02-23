@@ -73,16 +73,16 @@
 <header class="bg-blue-600 shadow">
     <div class="px-4 py-4 flex flex-col sm:flex-row items-center justify-between">
         <div class="flex flex-col">
-            <h1 class="text-2xl font-bold text-white"><span>{{ .Title }}</span> <span class="fa fa-arrow-right-long"></span> <span class="underline">{{ .BasePath }}/{{ .Directory }}</span></h1>
-            <p class="text-sm text-blue-100">
-                Shared directory: <a class="hover:underline" href="/view?base={{.BaseIndex}}">{{ .BasePath }}</a> | Current folder: /{{ .Directory }}
-            </p>
+            <h1 class="text-sm font-bold text-white flex items-center">
+                <a href="/" class="text-blue-100 hover:text-white flex items-center gap-2"> <span class="fa fa-home"></span> <span>Home</span></a>
+                <svg class="h-6 text-white px-2" viewBox="0 0 24 24" fill="current" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path clip-rule="evenodd" d="m9.46967 5.46967c.29289-.29289.76773-.29289 1.06063 0l2.6286 2.62858c.5748.57477 1.0384 1.03835 1.3831 1.44443.355.41812.6278.82432.7818 1.29852.2447.7531.2447 1.5645 0 2.3176-.154.4742-.4268.8804-.7818 1.2985-.3447.4061-.8083.8697-1.3831 1.4444l-2.6286 2.6286c-.2929.2929-.76774.2929-1.06063 0s-.29289-.7677 0-1.0606l2.60593-2.6059c.6027-.6028 1.0225-1.0234 1.3229-1.3773.2947-.3471.4302-.5804.4987-.7912.1469-.4519.1469-.9387 0-1.3906-.0685-.2108-.204-.4441-.4987-.7912-.3004-.3539-.7202-.77451-1.3229-1.37728l-2.60593-2.60589c-.29289-.29289-.29289-.76777 0-1.06066z" fill="#c5c5c5" fill-rule="evenodd"></path></g></svg>
+                <a class="hover:underline" href="/view?base={{.BaseIndex}}"><span>{{ .BasePath }}</span></a>
+                <svg class="h-6 text-white px-2" viewBox="0 0 24 24" fill="current" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path clip-rule="evenodd" d="m9.46967 5.46967c.29289-.29289.76773-.29289 1.06063 0l2.6286 2.62858c.5748.57477 1.0384 1.03835 1.3831 1.44443.355.41812.6278.82432.7818 1.29852.2447.7531.2447 1.5645 0 2.3176-.154.4742-.4268.8804-.7818 1.2985-.3447.4061-.8083.8697-1.3831 1.4444l-2.6286 2.6286c-.2929.2929-.76774.2929-1.06063 0s-.29289-.7677 0-1.0606l2.60593-2.6059c.6027-.6028 1.0225-1.0234 1.3229-1.3773.2947-.3471.4302-.5804.4987-.7912.1469-.4519.1469-.9387 0-1.3906-.0685-.2108-.204-.4441-.4987-.7912-.3004-.3539-.7202-.77451-1.3229-1.37728l-2.60593-2.60589c-.29289-.29289-.29289-.76777 0-1.06066z" fill="#c5c5c5" fill-rule="evenodd"></path></g></svg>
+                <span>/{{ .Directory }}</span>
+            </h1>
         </div>
         <div class="flex items-center space-x-4 mt-3 sm:mt-0">
             <span class="text-blue-100">Welcome, {{ .User }}</span>
-            <a href="/" class="text-blue-100 hover:text-white">
-                <i class="fa fa-home"></i> Dashboard
-            </a>
             {{ if eq .User "admin" }}
             <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded text-sm">
                 Permissions
@@ -287,9 +287,9 @@
 
 <!-- Preview Modal -->
 <div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
-    <div class="modal-content">
-        <button class="close-btn" onclick="closePreview()">&times;</button>
-        <div id="previewContent" class="w-full h-full"></div>
+    <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px); width: calc(100vw - 100px)">
+        <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
+        <div id="previewContent" class="h-full max-h-[calc(100vh-200px)] overflow-auto border mt-6"></div>
     </div>
 </div>
 

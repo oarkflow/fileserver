@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -23,6 +24,28 @@ import (
 	"github.com/oarkflow/filebrowser/filesystem/local"
 	"github.com/oarkflow/filebrowser/utils"
 )
+
+type StorageConfig struct {
+	Path string `json:"path"`
+}
+
+func loadStorageConfigs(filename string) ([]StorageConfig, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	var configs []StorageConfig
+	err = json.Unmarshal(data, &configs)
+	return configs, err
+}
+
+func saveStorageConfigs(filename string, configs []StorageConfig) error {
+	data, err := json.MarshalIndent(configs, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
 
 type File struct {
 	Name string
@@ -206,15 +229,12 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 }
 
 func (m *Manager) dashboard(c *fiber.Ctx) error {
-	if len(m.storages) == 1 {
-		return c.Redirect("/view?base=0")
-	}
 	var items []DashboardItem
 	for i, storage := range m.storages {
 		items = append(items, DashboardItem{Index: i, Path: storage.BasePath()})
 	}
 	ctx := DashboardContext{
-		Title: "Shared storages",
+		Title: "Shared Storages",
 		Bases: items,
 	}
 	return c.Render("dashboard", ctx)
@@ -377,7 +397,7 @@ func (m *Manager) editFile(c *fiber.Ctx) error {
 	}
 	fileParam := c.Query("file")
 	if !m.checkPermission(user, fileParam, "edit") {
-		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
+		return c.Status(fiber.StatusBadRequest).SendString("Permission denied")
 	}
 	storage := m.storages[baseIndex]
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileParam)), ".")
@@ -513,6 +533,44 @@ func (m *Manager) sharePost(c *fiber.Ctx) error {
 	return c.Redirect(fmt.Sprintf("/share?file=%s", fileParam))
 }
 
+// ---------------------------------------------------------------------
+// New handlers for adding storage directories via the UI
+
+// GET /addStorage: show a form for adding a new directory.
+func (m *Manager) addStoragePage(c *fiber.Ctx) error {
+	return c.Render("add_storage", fiber.Map{
+		"Title": "Add New Directory",
+	})
+}
+
+// POST /addStorage: process the submitted directory path.
+func (m *Manager) addStorage(c *fiber.Ctx) error {
+	path := c.FormValue("path")
+	if path == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("Path is required")
+	}
+	// Create a new storage instance.
+	newStorage := local.NewStorage(path)
+	m.storages = append(m.storages, newStorage)
+
+	// Update the JSON config.
+	const configFile = "storages.json"
+	var configs []StorageConfig
+	if data, err := os.ReadFile(configFile); err == nil {
+		if err := json.Unmarshal(data, &configs); err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString("Error parsing config")
+		}
+	}
+	configs = append(configs, StorageConfig{Path: path})
+	if err := saveStorageConfigs(configFile, configs); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Error saving config")
+	}
+	return c.Redirect("/")
+}
+
+// ---------------------------------------------------------------------
+// Setup routes
+
 func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Get("/login", auth.loginPage)
 	app.Post("/login", auth.loginPost)
@@ -533,6 +591,8 @@ func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Post("/permissions", m.updatePermissions)
 	app.Get("/share", m.sharePage)
 	app.Post("/share", m.sharePost)
+	app.Get("/addStorage", m.addStoragePage)
+	app.Post("/addStorage", m.addStorage)
 }
 
 type AuthManager struct {
@@ -615,9 +675,6 @@ func main() {
 	}
 	appCLI.Action = func(c *cli.Context) error {
 		ip, port, viewerPort := c.String("ip"), c.String("port"), c.String("viewer-port")
-		if c.NArg() == 0 {
-			cli.ShowAppHelpAndExit(c, 1)
-		}
 		args := c.Args().Slice()
 		manager := &Manager{
 			acl:       make(map[string]map[string][]string),
@@ -630,6 +687,22 @@ func main() {
 		manager.users["viewer"] = NewUser("viewer", "viewer", "viewer")
 		for _, p := range args {
 			storage := local.NewStorage(p)
+			manager.storages = append(manager.storages, storage)
+		}
+
+		// Load storages from JSON config.
+		const configFile = "storages.json"
+		configs, err := loadStorageConfigs(configFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Printf("No storages.json found, starting with no storages")
+				configs = []StorageConfig{}
+			} else {
+				return err
+			}
+		}
+		for _, config := range configs {
+			storage := local.NewStorage(config.Path)
 			manager.storages = append(manager.storages, storage)
 		}
 		engine := html.New("./views", ".html")

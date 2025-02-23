@@ -11,9 +11,7 @@
     <h1 class="text-4xl font-extrabold">{{ .Title }}</h1>
     <nav>
         <ul class="flex space-x-6">
-            <li><a href="#" class="text-white hover:underline">Home</a></li>
-            <li><a href="#" class="text-white hover:underline">About</a></li>
-            <li><a href="#" class="text-white hover:underline">Contact</a></li>
+            <li><a href="/" class="text-white hover:underline">Dashboard</a></li>
         </ul>
     </nav>
 </header>
@@ -33,7 +31,15 @@
                 </a>
             </div>
             {{ end }}
+            <div class="bg-white rounded-lg p-8 border-2 border-dashed border-gray-400">
+                <form action="/addStorage" method="POST">
+                    <label for="path" class="block text-gray-700 font-bold mb-2">Directory Path</label>
+                    <input type="text" id="path" name="path" class="w-full p-2 border rounded mb-4" placeholder="Enter absolute or relative path" required>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded">Add Directory</button>
+                </form>
+            </div>
         </div>
+
     </div>
 </main>
 </body>
