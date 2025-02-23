@@ -26,6 +26,7 @@ import (
 )
 
 type StorageConfig struct {
+	Type string `json:"type"`
 	Path string `json:"path"`
 }
 
@@ -45,6 +46,22 @@ func saveStorageConfigs(filename string, configs []StorageConfig) error {
 		return err
 	}
 	return os.WriteFile(filename, data, 0644)
+}
+
+type StorageItem struct {
+	Storage filesystem.Storage
+	Config  StorageConfig
+}
+
+func newStorageFromConfig(cfg StorageConfig) filesystem.Storage {
+	switch strings.ToLower(cfg.Type) {
+	case "local":
+		return local.NewStorage(cfg.Path)
+
+	default:
+
+		return local.NewStorage(cfg.Path)
+	}
 }
 
 type File struct {
@@ -81,14 +98,14 @@ type Context struct {
 	User      string
 }
 
-type DashboardContext struct {
-	Title string
-	Bases []DashboardItem
-}
-
 type DashboardItem struct {
 	Index int
 	Path  string
+}
+
+type DashboardContext struct {
+	Title string
+	Bases map[string][]DashboardItem
 }
 
 type User struct {
@@ -116,7 +133,7 @@ type Manager struct {
 	acl       map[string]map[string][]string
 	users     map[string]*User
 	tempLinks map[string]TemporaryLink
-	storages  []filesystem.Storage
+	storages  []StorageItem
 }
 
 func (m *Manager) getAllFiles(fs filesystem.Storage, dir string) (AllFiles, error) {
@@ -219,7 +236,7 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 	if !exists || time.Now().After(link.Expiry) {
 		return c.Status(fiber.StatusNotFound).SendString("Temporary link expired or not found")
 	}
-	storage := m.storages[link.BaseIndex]
+	storage := m.storages[link.BaseIndex].Storage
 	content, contentType, err := storage.ReadFile(link.FilePath)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
@@ -229,13 +246,19 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 }
 
 func (m *Manager) dashboard(c *fiber.Ctx) error {
-	var items []DashboardItem
-	for i, storage := range m.storages {
-		items = append(items, DashboardItem{Index: i, Path: storage.BasePath()})
+
+	grouped := make(map[string][]DashboardItem)
+	for i, item := range m.storages {
+		fsType := item.Config.Type
+		dItem := DashboardItem{
+			Index: i,
+			Path:  item.Config.Path,
+		}
+		grouped[fsType] = append(grouped[fsType], dItem)
 	}
 	ctx := DashboardContext{
 		Title: "Shared Storages",
-		Bases: items,
+		Bases: grouped,
 	}
 	return c.Render("dashboard", ctx)
 }
@@ -250,7 +273,7 @@ func (m *Manager) viewDir(c *fiber.Ctx) error {
 	if !m.checkPermission(user, dirParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	allFiles, err := m.getAllFiles(storage, dirParam)
 	if err != nil {
 		return err
@@ -265,7 +288,7 @@ func (m *Manager) viewDir(c *fiber.Ctx) error {
 	ctx := Context{
 		Title:     "Directory listing",
 		BaseIndex: baseIndex,
-		BasePath:  storage.BasePath(),
+		BasePath:  m.storages[baseIndex].Config.Path,
 		Directory: dirParam,
 		Parent:    parent,
 		Files:     allFiles.Files,
@@ -286,7 +309,7 @@ func (m *Manager) getFile(c *fiber.Ctx) error {
 	if user != nil && !m.checkPermission(user, fileParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	content, mimeType, err := storage.ReadFile(fileParam)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
@@ -305,7 +328,7 @@ func (m *Manager) uploadFiles(c *fiber.Ctx) error {
 	if !m.checkPermission(user, dirParam, "upload") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	form, err := c.MultipartForm()
 	if err != nil {
 		return err
@@ -329,7 +352,7 @@ func (m *Manager) deleteFile(c *fiber.Ctx) error {
 	if !m.checkPermission(user, pathParam, "delete") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	if err := storage.Remove(pathParam); err != nil {
 		return err
 	}
@@ -354,7 +377,7 @@ func (m *Manager) makeDir(c *fiber.Ctx) error {
 	if !m.checkPermission(user, dirParam, "create") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	targetDir := filepath.Join(dirParam, newDirName)
 	if err := storage.CreateDir(targetDir); err != nil {
 		return err
@@ -377,7 +400,7 @@ func (m *Manager) renameItem(c *fiber.Ctx) error {
 	if !m.checkPermission(user, oldPath, "edit") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	newPath := filepath.Join(filepath.Dir(oldPath), newName)
 	if err := storage.Rename(oldPath, newPath); err != nil {
 		return err
@@ -399,7 +422,7 @@ func (m *Manager) editFile(c *fiber.Ctx) error {
 	if !m.checkPermission(user, fileParam, "edit") {
 		return c.Status(fiber.StatusBadRequest).SendString("Permission denied")
 	}
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileParam)), ".")
 	if !slices.Contains(utils.PlainText, ext) {
 		return c.Status(fiber.StatusBadRequest).SendString("Editing not supported for this file type")
@@ -428,7 +451,7 @@ func (m *Manager) saveFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}
 	content := c.FormValue("content")
-	storage := m.storages[baseIndex]
+	storage := m.storages[baseIndex].Storage
 	if err := storage.WriteFile(fileParam, []byte(content)); err != nil {
 		return err
 	}
@@ -533,27 +556,37 @@ func (m *Manager) sharePost(c *fiber.Ctx) error {
 	return c.Redirect(fmt.Sprintf("/share?file=%s", fileParam))
 }
 
-// ---------------------------------------------------------------------
-// New handlers for adding storage directories via the UI
-
-// GET /addStorage: show a form for adding a new directory.
 func (m *Manager) addStoragePage(c *fiber.Ctx) error {
 	return c.Render("add_storage", fiber.Map{
 		"Title": "Add New Directory",
 	})
 }
 
-// POST /addStorage: process the submitted directory path.
 func (m *Manager) addStorage(c *fiber.Ctx) error {
 	path := c.FormValue("path")
 	if path == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("Path is required")
 	}
-	// Create a new storage instance.
-	newStorage := local.NewStorage(path)
-	m.storages = append(m.storages, newStorage)
+	fsType := c.FormValue("type")
+	if fsType == "" {
+		fsType = "local"
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid path")
+	}
+	if c.FormValue("newFolder") == "on" {
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(absPath, 0755); err != nil {
+				return c.Status(fiber.StatusInternalServerError).SendString("Failed to create new folder")
+			}
+		}
+	}
 
-	// Update the JSON config.
+	cfg := StorageConfig{Type: fsType, Path: absPath}
+	newFS := newStorageFromConfig(cfg)
+	item := StorageItem{Storage: newFS, Config: cfg}
+	m.storages = append(m.storages, item)
 	const configFile = "storages.json"
 	var configs []StorageConfig
 	if data, err := os.ReadFile(configFile); err == nil {
@@ -561,21 +594,17 @@ func (m *Manager) addStorage(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).SendString("Error parsing config")
 		}
 	}
-	configs = append(configs, StorageConfig{Path: path})
+	configs = append(configs, cfg)
 	if err := saveStorageConfigs(configFile, configs); err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Error saving config")
 	}
 	return c.Redirect("/")
 }
 
-// ---------------------------------------------------------------------
-// Setup routes
-
 func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Get("/login", auth.loginPage)
 	app.Post("/login", auth.loginPost)
 	app.Get("/logout", auth.logout)
-
 	app.Get("/temporary", m.tempLinkAccess)
 	app.Get("/", m.dashboard)
 	app.Get("/view", m.viewDir)
@@ -680,17 +709,19 @@ func main() {
 			acl:       make(map[string]map[string][]string),
 			users:     make(map[string]*User),
 			tempLinks: make(map[string]TemporaryLink),
-			storages:  []filesystem.Storage{},
+			storages:  []StorageItem{},
 		}
+
 		manager.users["admin"] = NewUser("admin", "admin", "admin")
 		manager.users["editor"] = NewUser("editor", "editor", "editor")
 		manager.users["viewer"] = NewUser("viewer", "viewer", "viewer")
+
 		for _, p := range args {
-			storage := local.NewStorage(p)
-			manager.storages = append(manager.storages, storage)
+			cfg := StorageConfig{Type: "local", Path: p}
+			item := StorageItem{Storage: local.NewStorage(p), Config: cfg}
+			manager.storages = append(manager.storages, item)
 		}
 
-		// Load storages from JSON config.
 		const configFile = "storages.json"
 		configs, err := loadStorageConfigs(configFile)
 		if err != nil {
@@ -701,10 +732,11 @@ func main() {
 				return err
 			}
 		}
-		for _, config := range configs {
-			storage := local.NewStorage(config.Path)
-			manager.storages = append(manager.storages, storage)
+		for _, cfg := range configs {
+			item := StorageItem{Storage: newStorageFromConfig(cfg), Config: cfg}
+			manager.storages = append(manager.storages, item)
 		}
+
 		engine := html.New("./views", ".html")
 		engine.AddFuncMap(map[string]interface{}{
 			"lower": strings.ToLower,

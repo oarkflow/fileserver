@@ -16,30 +16,50 @@
     </nav>
 </header>
 <main class="p-10">
-    <div class="container mx-auto">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {{ range .Bases }}
-            <div class="bg-white rounded-lg shadow-xl p-8 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl">
-                <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-                    <i class="fas fa-folder text-yellow-500"></i> {{ .Path }}
-                </h2>
-                <p class="text-gray-600 mb-4">Explore the contents of this directory.</p>
-                <a href="/view?base={{ .Index }}"
-                   class="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition-all">
-                    <i class="fas fa-folder-open"></i>
-                    <span>Open Directory</span>
-                </a>
+    <div class="container mx-auto space-y-10">
+        {{ range $fsType, $items := .Bases }}
+        <section>
+            <h2 class="text-2xl font-bold mb-4 capitalize">{{ $fsType }}</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                {{ range $items }}
+                <div class="bg-white rounded-lg shadow-xl p-8 transform transition-all duration-300 hover:scale-100 hover:shadow-2xl">
+                    <h3 class="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-folder text-yellow-500"></i> {{ .Path }}
+                    </h3>
+                    <p class="text-gray-600 mb-4">Explore the contents of this directory.</p>
+                    <a href="/view?base={{ .Index }}"
+                       class="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition-all">
+                        <i class="fas fa-folder-open"></i>
+                        <span>Open Directory</span>
+                    </a>
+                </div>
+                {{ end }}
             </div>
-            {{ end }}
+        </section>
+        {{ end }}
+        <section>
             <div class="bg-white rounded-lg p-8 border-2 border-dashed border-gray-400">
                 <form action="/addStorage" method="POST">
                     <label for="path" class="block text-gray-700 font-bold mb-2">Directory Path</label>
                     <input type="text" id="path" name="path" class="w-full p-2 border rounded mb-4" placeholder="Enter absolute or relative path" required>
-                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded">Add Directory</button>
+
+                    <label for="type" class="block text-gray-700 font-bold mb-2">Filesystem Type</label>
+                    <select id="type" name="type" class="w-full p-2 border rounded mb-4">
+                        <option value="local">Local</option>
+                        <option value="s3">S3</option>
+                    </select>
+
+                    <div class="mb-4 flex items-center">
+                        <input type="checkbox" id="newFolder" name="newFolder" class="mr-2">
+                        <label for="newFolder" class="text-gray-700">Create New Folder if it doesn't exist</label>
+                    </div>
+
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded">
+                        Add Directory
+                    </button>
                 </form>
             </div>
-        </div>
-
+        </section>
     </div>
 </main>
 </body>
