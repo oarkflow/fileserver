@@ -97,6 +97,12 @@
             border-bottom: 2px solid transparent;
             color: #4b5563; /* gray-600 */
         }
+        .x-spreadsheet-sheet {
+            max-height: calc(100vh - 250px) !important;
+            max-width: calc(100vw - 100px) !important;
+            overflow: auto !important;
+        }
+
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -307,7 +313,7 @@
 <div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
     <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px); width: calc(100vw - 100px)">
         <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
-        <div id="previewContent" class="p-4 h-full max-h-fit overflow-y-auto"></div>
+        <div id="previewContent" class="h-full max-h-[calc(100vh-200px)] overflow-auto border mt-6"></div>
     </div>
 </div>
 
@@ -386,12 +392,15 @@
                     showPreview("Error loading file.");
                 });
         } else if (['mp4', 'webm'].includes(ext)) {
+            url += "&embed=true"
             content = `<video controls class="w-full rounded" id="videoPreview"><source src="${url}" type="video/${ext}">Your browser does not support the video tag.</video>`;
             showPreview(content);
         } else if (['mp3', 'wav'].includes(ext)) {
+            url += "&embed=true"
             content = `<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`;
             showPreview(content);
         } else if (['docx'].includes(ext)) {
+            url += "&embed=true"
             const previewContent = document.getElementById('previewContent');
             previewContent.innerHTML = "";
             (async () => {
@@ -406,6 +415,7 @@
                     });
             })();
         } else if (['xlsx'].includes(ext)) {
+            url += "&embed=true"
             const previewContent = document.getElementById('previewContent');
             previewContent.innerHTML = "";
             (async () => {
@@ -417,7 +427,7 @@
                 modal.classList.remove('hidden');
             })();
         } else {
-            url = "http://" + host + url
+            url = "http://" + host + url+"&embed=true"
             content = `<iframe src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
             showPreview(content);
         }

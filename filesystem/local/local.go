@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"github.com/oarkflow/filebrowser/filesystem"
 )
@@ -59,18 +61,17 @@ func (ls *Storage) ListDir(path string) ([]filesystem.FileInfo, error) {
 	return infos, nil
 }
 
-// ReadFile now returns the file content along with its MIME type.
 func (ls *Storage) ReadFile(path string) ([]byte, string, error) {
 	fullPath := ls.resolvePath(path)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, "", err
 	}
-	// Attempt to determine MIME type using file extension.
+
 	ext := filepath.Ext(fullPath)
 	mimeType := mime.TypeByExtension(ext)
 	if mimeType == "" {
-		// Fallback: detect MIME type from file content.
+
 		mimeType = http.DetectContentType(data)
 	}
 	return data, mimeType, nil
@@ -108,7 +109,7 @@ func (ls *Storage) SaveUploadedFile(path string, file *multipart.FileHeader) err
 	}
 	defer src.Close()
 	fullPath := ls.resolvePath(path)
-	// Ensure target directory exists.
+
 	err = os.MkdirAll(filepath.Dir(fullPath), 0755)
 	if err != nil {
 		return err
@@ -120,4 +121,112 @@ func (ls *Storage) SaveUploadedFile(path string, file *multipart.FileHeader) err
 	defer dst.Close()
 	_, err = io.Copy(dst, src)
 	return err
+}
+
+func DirSize(root string) (int64, error) {
+	var totalSize int64
+	var mu sync.Mutex
+	visited := make(map[string]struct{})
+	var dirWg sync.WaitGroup
+	var workerWg sync.WaitGroup
+	dirCh := make(chan string, 100)
+	errCh := make(chan error, 1)
+	worker := func() {
+		defer workerWg.Done()
+		for dir := range dirCh {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+				}
+				dirWg.Done()
+				continue
+			}
+			for _, entry := range entries {
+				fullPath := filepath.Join(dir, entry.Name())
+				var info os.FileInfo
+				if entry.Type()&os.ModeSymlink != 0 {
+					info, err = os.Stat(fullPath)
+					if err != nil {
+						select {
+						case errCh <- err:
+						default:
+						}
+						continue
+					}
+				} else {
+					info, err = entry.Info()
+					if err != nil {
+						select {
+						case errCh <- err:
+						default:
+						}
+						continue
+					}
+				}
+				if info.Mode().IsRegular() {
+					mu.Lock()
+					totalSize += info.Size()
+					mu.Unlock()
+				} else if info.IsDir() {
+					absPath, err := filepath.Abs(fullPath)
+					if err != nil {
+						select {
+						case errCh <- err:
+						default:
+						}
+						continue
+					}
+					canonical, err := filepath.EvalSymlinks(absPath)
+					if err != nil {
+						select {
+						case errCh <- err:
+						default:
+						}
+						continue
+					}
+					mu.Lock()
+					if _, ok := visited[canonical]; !ok {
+						visited[canonical] = struct{}{}
+						mu.Unlock()
+						dirWg.Add(1)
+						dirCh <- canonical
+					} else {
+						mu.Unlock()
+					}
+				}
+			}
+			dirWg.Done()
+		}
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return 0, err
+	}
+	canonicalRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return 0, err
+	}
+	visited[canonicalRoot] = struct{}{}
+	dirWg.Add(1)
+	dirCh <- canonicalRoot
+	numWorkers := runtime.NumCPU()
+	workerWg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go worker()
+	}
+	go func() {
+		dirWg.Wait()
+		close(dirCh)
+	}()
+	workerWg.Wait()
+	select {
+	case err, ok := <-errCh:
+		if ok {
+			return 0, err
+		}
+	default:
+	}
+	return totalSize, nil
 }

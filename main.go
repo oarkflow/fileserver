@@ -555,7 +555,8 @@ func (a *AuthManager) loadUser(c *fiber.Ctx) error {
 
 func (a *AuthManager) requireAuth(c *fiber.Ctx) error {
 	path := c.Path()
-	if path == "/login" || (path == "/temporary" && c.Method() == "GET") {
+	embed := c.Query("embed", "false")
+	if path == "/login" || (path == "/temporary" && c.Method() == "GET") || embed == "true" {
 		return c.Next()
 	}
 	user := c.Locals("user")
