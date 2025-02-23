@@ -1,35 +1,87 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/fontawesome.min.css">
+    <script src="/static/tailwind.js"></script>
 </head>
-<body>
-<h1>Permissions for {{.Path}}</h1>
-{{if .Permissions}}
-<h2>Current ACL</h2>
-<table border="1">
-    <tr>
-        <th>Username</th>
-        <th>Actions</th>
-    </tr>
-    {{range $username, $actions := .Permissions}}
-    <tr>
-        <td>{{$username}}</td>
-        <td>{{join $actions ", "}}</td>
-    </tr>
+<body class="bg-gray-100 text-gray-800">
+<!-- Header -->
+<header class="bg-blue-600 shadow">
+    <div class="px-4 py-4 flex flex-col sm:flex-row items-center justify-between">
+        <div class="flex flex-col">
+            <h1 class="text-2xl font-bold text-white">{{ .Title }}</h1>
+            <p class="text-sm text-blue-100">
+                Shared directory: {{ .BasePath }} | Current folder: /{{ .Directory }}
+            </p>
+        </div>
+        <div class="flex items-center space-x-4 mt-3 sm:mt-0">
+            <span class="text-blue-100">Welcome, {{ .User }}</span>
+            <a href="/" class="text-blue-100 hover:text-white">
+                <i class="fa fa-home"></i> Dashboard
+            </a>
+            {{ if eq .User "admin" }}
+            <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded text-sm">
+                Permissions
+            </a>
+            {{ end }}
+            <a href="/logout" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm">
+                Logout
+            </a>
+        </div>
+    </div>
+</header>
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">Permissions for {{.Path}}</h1>
+
+    {{if .Permissions}}
+    <div class="mb-8">
+        <h2 class="text-2xl font-semibold mb-4">Current ACL</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white border border-gray-200">
+                <thead>
+                <tr>
+                    <th class="py-2 px-4 bg-gray-50 border-b border-gray-200 text-left text-sm font-medium text-gray-700">Username</th>
+                    <th class="py-2 px-4 bg-gray-50 border-b border-gray-200 text-left text-sm font-medium text-gray-700">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{range $username, $actions := .Permissions}}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 px-4 border-b border-gray-200">{{ $username }}</td>
+                    <td class="py-2 px-4 border-b border-gray-200">{{ join $actions ", " }}</td>
+                </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {{else}}
+    <p class="mb-8 text-gray-600">No permissions set for this path.</p>
     {{end}}
-</table>
-{{else}}
-<p>No permissions set for this path.</p>
-{{end}}
-<h2>Set/Update Permission</h2>
-<form method="POST" action="/permissions">
-    <input type="hidden" name="path" value="{{.Path}}">
-    <label>Username: <input type="text" name="username"></label><br>
-    <label>Actions (comma separated, e.g., view,edit,delete): <input type="text" name="actions"></label><br>
-    <input type="submit" value="Set Permission">
-</form>
-<p><a href="/">Back to Dashboard</a></p>
+
+    <div class="mb-8">
+        <h2 class="text-2xl font-semibold mb-4">Set/Update Permission</h2>
+        <form method="POST" action="/permissions" class="bg-white shadow rounded-lg p-6">
+            <input type="hidden" name="path" value="{{.Path}}">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" name="username" placeholder="Enter username" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700">Actions</label>
+                <input type="text" name="actions" placeholder="e.g., view,edit,delete" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+                Set Permission
+            </button>
+        </form>
+    </div>
+
+    <div>
+        <a href="/" class="text-blue-600 hover:underline">&larr; Back to Dashboard</a>
+    </div>
+</div>
 </body>
 </html>

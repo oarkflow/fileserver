@@ -734,7 +734,7 @@ function Viewer( viewerPlugin, parameters ) {
                 supportsFileExtension: function ( extension ) {
                     return (extension === 'txt' || extension === 'json');
                 },
-                path:                  "./TextViewerPlugin",
+                path:                  "./TextViewerPlugin.js",
                 getClass:              function () {
                     return TextViewerPlugin;
                 }

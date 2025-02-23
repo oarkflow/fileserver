@@ -1,79 +1,34 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ .Title }}</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }} {{ .BasePath }}/{{ .Directory }}</title>
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
     <link rel="stylesheet" href="/static/fontawesome.min.css">
-    <link href="/static/viewer.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/viewer.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/x-data-spreadsheet/dist/xspreadsheet.css" />
     <script src="/static/tailwind.js"></script>
     <script src="/static/viewer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/konva@9.3.6/konva.min.js"></script>
     <script src="/static/viewer-js/docxjs/docx-preview.min.js"></script>
-    <!-- x-spreadsheet stylesheet -->
-    <link rel="stylesheet" href="https://unpkg.com/x-data-spreadsheet/dist/xspreadsheet.css"/>
-    <!-- x-spreadsheet library -->
     <script src="https://unpkg.com/x-data-spreadsheet/dist/xspreadsheet.js"></script>
     <script src="/static/viewer-js/sheetjs/xlsxspreadsheet.js"></script>
     <script src="/static/viewer-js/sheetjs/xlsx.full.min.js"></script>
-
     <style>
-        /* Masonry layout for file lists */
-        .masonry {
-            --masonry-gap: 1rem;
-            --masonry-brick-width: 400px;
-            column-gap: var(--masonry-gap);
-            column-fill: initial;
-            column-width: var(--masonry-brick-width);
-        }
-        .masonry > * {
-            break-inside: avoid;
-            margin-bottom: var(--masonry-gap);
-        }
-        @supports(grid-template-rows: masonry) {
-            .masonry {
-                display: grid;
-                gap: var(--masonry-gap);
-                grid-template-rows: masonry;
-                grid-template-columns: repeat(auto-fill, minmax(var(--masonry-brick-width), 1fr));
-            }
-            .masonry > * { margin-bottom: initial; }
-        }
-        .masonry { padding: 2rem; }
-        .brick { padding: 1rem; }
-        .masonry-dir {
-            --masonry-gap: 1rem;
-            --masonry-brick-width: 300px;
-            column-gap: var(--masonry-gap);
-            column-fill: initial;
-            column-width: var(--masonry-brick-width);
-        }
-        .masonry-dir > * {
-            break-inside: avoid;
-            margin-bottom: var(--masonry-gap);
-        }
-        @supports(grid-template-rows: masonry) {
-            .masonry-dir {
-                display: grid;
-                gap: var(--masonry-gap);
-                grid-template-rows: masonry;
-                grid-template-columns: repeat(auto-fill, minmax(var(--masonry-brick-width), 1fr));
-            }
-            .masonry-dir > * { margin-bottom: initial; }
-        }
-        .masonry-dir { padding: 2rem; }
-        /* Modal styles for preview dialog */
+        /* Full-width layout */
+        body { margin: 0; }
+        header, main, .action-bar { width: 100%; }
+        /* Modal & Toast */
         .modal-bg { background-color: rgba(0,0,0,0.5); }
-        /* Toast Notification */
         .toast {
             position: fixed;
             bottom: 1rem;
             right: 1rem;
             background: #4B5563;
-            color: white;
+            color: #fff;
             padding: 0.75rem 1rem;
             border-radius: 0.375rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
@@ -81,129 +36,155 @@
             opacity: 0;
             transition: opacity 0.3s ease;
         }
-        .toast.show {
-            opacity: 1;
+        .toast.show { opacity: 1; }
+        /* Tab Navigation */
+        .tab-btn { padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; }
+        .tab-active { border-b-2 border-blue-600; color: #2563eb; }
+        .tab-inactive { color: #6B7280; }
+        /* Responsive preview modal */
+        #previewModal .modal-content {
+            background: #fff;
+            border-radius: 0.5rem;
+            overflow: auto;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 90vh;
+            padding: 1rem;
+            position: relative;
         }
-        /* Simple tab styling */
-        .tab-btn {
-            padding: 0.5rem 1rem;
+        #previewModal button.close-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: #4B5563;
             cursor: pointer;
         }
-        .tab-active {
-            border-bottom: 2px solid #2563eb; /* blue-600 */
-            color: #2563eb;
-        }
-        .tab-inactive {
-            border-bottom: 2px solid transparent;
-            color: #4b5563; /* gray-600 */
-        }
         .x-spreadsheet-sheet {
-            max-height: calc(100vh - 250px) !important;
-            max-width: calc(100vw - 100px) !important;
+            max-height: calc(90vh - 100px) !important;
             overflow: auto !important;
         }
-
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-50 text-gray-800">
 <!-- Header -->
-<header class="bg-blue-600 text-white p-4 flex flex-col sm:flex-row sm:justify-between items-center">
-    <div class="flex flex-col sm:flex-row items-center gap-4">
-        <div>
-            <h1 class="text-2xl font-bold">{{ .Title }}</h1>
-            <p class="text-sm">
-                <span>Shared directory: {{ .BasePath }}</span>
+<header class="bg-blue-600 shadow">
+    <div class="px-4 py-4 flex flex-col sm:flex-row items-center justify-between">
+        <div class="flex flex-col">
+            <h1 class="text-2xl font-bold text-white"><span>{{ .Title }}</span> <span class="fa fa-arrow-right-long"></span> <span class="underline">{{ .BasePath }}/{{ .Directory }}</span></h1>
+            <p class="text-sm text-blue-100">
+                Shared directory: <a class="hover:underline" href="/view?base={{.BaseIndex}}">{{ .BasePath }}</a> | Current folder: /{{ .Directory }}
             </p>
-            <p class="text-sm">Current folder: /{{ .Directory }}</p>
         </div>
-        <div class="flex items-center gap-4">
-            <span class="text-sm">Welcome, {{ .User }}</span>
-            <a href="/logout" class="bg-red-500 hover:bg-red-700 text-white py-1 px-3 rounded text-sm">Logout</a>
+        <div class="flex items-center space-x-4 mt-3 sm:mt-0">
+            <span class="text-blue-100">Welcome, {{ .User }}</span>
+            <a href="/" class="text-blue-100 hover:text-white">
+                <i class="fa fa-home"></i> Dashboard
+            </a>
             {{ if eq .User "admin" }}
-            <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-500 hover:bg-gray-700 text-white py-1 px-3 rounded text-sm">Permissions</a>
+            <a href="/permissions?base={{ .BaseIndex }}&path={{ .Directory }}" class="bg-gray-700 hover:bg-gray-800 text-white py-2 px-4 rounded text-sm">
+                Permissions
+            </a>
             {{ end }}
-            <span><a href="/"><i class="fa fa-home"></i> Dashboard</a></span>
+            <a href="/logout" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm">
+                Logout
+            </a>
         </div>
-    </div>
-    <!-- Actions: Upload & New Directory -->
-    <div class="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
-        <!-- Upload Form -->
-        <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="flex items-center gap-2">
-            <input type="hidden" name="base" value="{{ .BaseIndex }}">
-            <input type="hidden" name="directory" value="{{ .Directory }}">
-            <!-- Hidden file input triggered by label -->
-            <label for="fileInput" class="bg-blue-500 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded cursor-pointer">
-                Upload Files/Folder
-            </label>
-            <input type="file" id="fileInput" name="file-upload" multiple webkitdirectory directory class="hidden">
-            <input type="hidden" id="fullPathsInput" name="full-paths[]" />
-            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded">
-                Submit
-            </button>
-        </form>
-        <!-- New Directory Form -->
-        <form action="/mkdir" method="POST" class="flex items-center gap-2">
-            <input type="hidden" name="base" value="{{ .BaseIndex }}">
-            <input type="hidden" name="directory" value="{{ .Directory }}">
-            <input type="text" name="newDirName" placeholder="New directory" required class="py-1 px-2 border border-gray-300 rounded text-sm text-gray-800" style="min-width: 120px;">
-            <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-medium py-1 px-3 rounded">
-                Create
-            </button>
-        </form>
     </div>
 </header>
 
-<!-- Main content container -->
-<main class="p-4">
-    <!-- Parent Directory Link -->
+<!-- Action Bar -->
+<div class="action-bar bg-white shadow mb-6 px-4 py-4 flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+    <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="flex items-center space-x-3">
+        <input type="hidden" name="base" value="{{ .BaseIndex }}">
+        <input type="hidden" name="directory" value="{{ .Directory }}">
+        <label for="fileInput" class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded">
+            Upload Files/Folder
+        </label>
+        <input type="file" id="fileInput" name="file-upload" multiple class="hidden">
+        <input type="hidden" id="fullPathsInput" name="full-paths[]" />
+        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded">
+            Submit
+        </button>
+    </form>
+    <form action="/mkdir" method="POST" class="flex items-center space-x-3">
+        <input type="hidden" name="base" value="{{ .BaseIndex }}">
+        <input type="hidden" name="directory" value="{{ .Directory }}">
+        <input type="text" name="newDirName" placeholder="New directory" required class="border border-gray-300 rounded py-2 px-3 text-gray-700 focus:outline-none focus:ring focus:border-blue-300" style="min-width: 180px;">
+        <button type="submit" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded">
+            Create
+        </button>
+    </form>
+</div>
+
+<!-- Main Content -->
+<main class="w-full px-4">
+    <!-- Breadcrumb / Parent Directory -->
     {{ if ne .Directory "" }}
     <div class="mb-6">
-        <a href="/view?base={{ .BaseIndex }}&dir={{ .Parent }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded inline-block">
-            Go to Parent Directory
+        <a href="/view?base={{ .BaseIndex }}&dir={{ .Parent }}" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+            &larr; Go to Parent Directory
         </a>
     </div>
     {{ end }}
 
-    <!-- Global Filter (Text & File Type) -->
-    <div class="px-4 mb-4 flex gap-2">
-        <input type="text" id="globalFilter" placeholder="Global filter by name" class="border p-2 rounded flex-1">
-        <select id="globalTypeFilter" class="border p-2 rounded">
+    <!-- Global Filter -->
+    <div class="mb-6 bg-white shadow rounded p-4 flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+        <input type="text" id="globalFilter" placeholder="Global filter by name" class="w-full sm:w-1/2 border border-gray-300 rounded py-2 px-3 focus:outline-none focus:ring focus:border-blue-300">
+        <select id="globalTypeFilter" class="w-full sm:w-1/3 border border-gray-300 rounded py-2 px-3 focus:outline-none focus:ring focus:border-blue-300">
             <option value="">All Types</option>
         </select>
     </div>
 
     <!-- Tabs Navigation -->
-    <div class="px-4 mb-4 flex space-x-4">
-        <button id="tab-btn-dirs" class="tab-btn tab-active" onclick="showTab('dirs')">Directories</button>
-        <button id="tab-btn-imgs" class="tab-btn tab-inactive" onclick="showTab('imgs')">Images</button>
-        <button id="tab-btn-files" class="tab-btn tab-inactive" onclick="showTab('files')">Files</button>
+    {{ if or .Dirs .Images .Files }}
+    <div class="mb-4 border-b border-gray-200">
+        <nav class="flex space-x-8">
+            {{ if .Dirs }}
+            <button id="tab-btn-dirs" class="tab-btn tab-active border-b-2 border-blue-600 focus:outline-none" onclick="showTab('dirs')">
+                Directories
+            </button>
+            {{ end }}
+            {{ if .Images }}
+            <button id="tab-btn-imgs" class="tab-btn {{ if .Dirs }}tab-inactive{{ else }}tab-active{{ end }} focus:outline-none" onclick="showTab('imgs')">
+                Images
+            </button>
+            {{ end }}
+            {{ if .Files }}
+            <button id="tab-btn-files" class="tab-btn {{ if or .Dirs .Images }}tab-inactive{{ else }}tab-active{{ end }} focus:outline-none" onclick="showTab('files')">
+                Files
+            </button>
+            {{ end }}
+        </nav>
     </div>
+    {{ end }}
 
     <!-- Tab Contents -->
     <!-- Directories Tab -->
-    <div id="tab-content-dirs">
-        {{ if .Dirs }}
-        <h2 class="text-xl font-semibold px-4 pt-4">Directories</h2>
-        <div id="directoriesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+    {{ if .Dirs }}
+    <section id="tab-content-dirs">
+        <h2 class="text-xl font-semibold mb-4">Directories</h2>
+        <div id="directoriesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Dirs }}
-            <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 hover:shadow-lg" data-name="{{ .Name }}">
-                <div class="flex items-center gap-3 mb-2">
-                    <i class="fas fa-folder text-2xl text-yellow-500"></i>
-                    <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:underline font-semibold text-lg">
+            <div class="brick bg-white shadow rounded-lg p-4 hover:shadow-lg" data-name="{{ .Name }}">
+                <div class="flex items-center space-x-3 mb-2">
+                    <i class="fas fa-folder text-3xl text-yellow-500"></i>
+                    <a href="/view?base={{ $.BaseIndex }}&dir={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-lg font-semibold text-blue-600 hover:underline">
                     {{ .Name }}/
                     </a>
                 </div>
-                <div class="text-gray-500 text-sm flex justify-between">
-                    <p>{{ .Size }}</p>
-                    <p>{{ .Mode }}</p>
-                    <p>{{ .Date }}</p>
+                <div class="text-gray-500 text-sm flex justify-between mb-2">
+                    <span>{{ .Size }}</span>
+                    <span>{{ .Mode }}</span>
+                    <span>{{ .Date }}</span>
                 </div>
-                <!-- Rename & Delete for directories -->
-                <div class="mt-3 flex items-center gap-2">
-                    <form action="/rename" method="POST" onsubmit="return confirmRename(this)" class="flex items-center gap-1">
+                <div class="flex items-center space-x-2">
+                    <form action="/rename" method="POST" onsubmit="return confirmRename(this)" class="flex items-center space-x-1">
                         <input type="hidden" name="base" value="{{ $.BaseIndex }}">
                         <input type="hidden" name="oldPath" value="{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}">
-                        <input type="text" name="newName" placeholder="Rename" class="border rounded p-1 text-sm">
+                        <input type="text" name="newName" placeholder="Rename" class="border border-gray-300 rounded p-1 text-sm focus:outline-none">
                         <button type="submit" class="text-blue-600 hover:text-blue-800">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -219,32 +200,29 @@
             </div>
             {{ end }}
         </div>
-        {{ end }}
-    </div>
+    </section>
+    {{ end }}
 
     <!-- Images Tab -->
-    <div id="tab-content-imgs" class="hidden">
-        {{ if .Images }}
-        <h2 class="text-xl font-semibold px-4 pt-4">Images</h2>
-        <div id="imagesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+    {{ if .Images }}
+    <section id="tab-content-imgs" class="{{ if .Dirs }}hidden{{ end }}">
+        <h2 class="text-xl font-semibold mb-4">Images</h2>
+        <div id="imagesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Images }}
-            <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
-            <div class="mb-1 w-full h-full relative">
-                <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="viewer-image object-contain w-full h-48 rounded cursor-pointer">
-                <p class="text-gray-700 font-semibold mt-2 truncate">{{ .Name }}</p>
-                <div class="mt-2">
-                    <div class="text-gray-500 text-sm flex justify-between">
-                        <p>{{ .Size }}</p>
-                        <p>{{ .Mode }}</p>
-                        <p>{{ .Date }}</p>
-                    </div>
-                </div>
+            <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+            <div class="w-full h-48 overflow-hidden rounded mb-2">
+                <img src="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" alt="{{ .Name }}" class="w-full h-full object-contain cursor-pointer viewer-image">
             </div>
-            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+            <p class="text-gray-700 font-semibold truncate">{{ .Name }}</p>
+            <div class="text-gray-500 text-xs flex justify-between mt-1">
+                <span>{{ .Size }}</span>
+                <span>{{ .Mode }}</span>
+                <span>{{ .Date }}</span>
+            </div>
+            <div class="absolute top-2 right-2 flex items-center space-x-2 bg-white rounded p-1 shadow">
                 <a href="/get?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" download class="text-blue-600 hover:text-blue-800">
                 <i class="fas fa-download"></i>
                 </a>
-                <!-- Temporary Link Button -->
                 <a href="javascript:void(0);" onclick="generateTempLinkFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-purple-600 hover:text-purple-800">
                 <i class="fas fa-link"></i>
                 </a>
@@ -258,29 +236,27 @@
             </div>
         </div>
         {{ end }}
-    </div>
+        </div>
+    </section>
     {{ end }}
-    </div>
 
     <!-- Files Tab -->
-    <div id="tab-content-files" class="hidden">
-        {{ if .Files }}
-        <h2 class="text-xl font-semibold px-4 pt-4">Files</h2>
-        <div id="filesContainer" class="grid lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 gap-2">
+    {{ if .Files }}
+    <section id="tab-content-files" class="{{ if or .Dirs .Images }}hidden{{ end }}">
+        <h2 class="text-xl font-semibold mb-4">Files</h2>
+        <div id="filesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Files }}
-            <div class="brick bg-white shadow rounded-lg overflow-hidden p-4 relative hover:shadow-none" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
-            <div class="flex flex-col gap-2 mb-2">
-                <div class="flex items-center gap-3">
-                    <i class="fas fa-file text-2xl text-gray-600"></i>
-                    <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
-                </div>
+            <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
+            <div class="flex items-center space-x-3 mb-2">
+                <i class="fas fa-file text-3xl text-gray-600"></i>
+                <p class="text-gray-700 font-semibold truncate" title="{{ .Name }}">{{ .Name }}</p>
             </div>
-            <div class="text-gray-500 text-sm flex justify-between">
-                <p>{{ .Size }}</p>
-                <p>{{ .Mode }}</p>
-                <p>{{ .Date }}</p>
+            <div class="text-gray-500 text-xs flex justify-between mb-2">
+                <span>{{ .Size }}</span>
+                <span>{{ .Mode }}</span>
+                <span>{{ .Date }}</span>
             </div>
-            <div class="absolute top-2 right-2 flex items-center gap-2 bg-white p-2 rounded-lg">
+            <div class="absolute top-2 right-2 flex items-center space-x-2 bg-white rounded p-1 shadow">
                 <a href="/edit?base={{ $.BaseIndex }}&file={{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}" class="text-blue-600 hover:text-blue-800">
                 <i class="fas fa-edit"></i>
                 </a>
@@ -290,7 +266,6 @@
                 <a href="javascript:void(0);" onclick="previewFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-green-600 hover:text-green-800">
                 <i class="fas fa-eye"></i>
                 </a>
-                <!-- Temporary Link Button -->
                 <a href="javascript:void(0);" onclick="generateTempLinkFile({{ $.BaseIndex }}, '{{ if eq $.Directory "" }}{{ .Name }}{{ else }}{{ $.Directory }}/{{ .Name }}{{ end }}')" class="text-purple-600 hover:text-purple-800">
                 <i class="fas fa-link"></i>
                 </a>
@@ -304,54 +279,41 @@
             </div>
         </div>
         {{ end }}
-    </div>
+        </div>
+    </section>
     {{ end }}
-    </div>
+
 </main>
 
 <!-- Preview Modal -->
 <div id="previewModal" class="fixed inset-0 flex items-center justify-center modal-bg hidden">
-    <div class="bg-white rounded-lg shadow-xl max-h-full p-4 relative overflow-y-auto" style="height: calc(100vh - 100px); width: calc(100vw - 100px)">
-        <button class="absolute -top-1 right-0 m-2 text-gray-700 text-3xl leading-none" onclick="closePreview()"><i class="fa fa-close"></i></button>
-        <div id="previewContent" class="h-full max-h-[calc(100vh-200px)] overflow-auto border mt-6"></div>
+    <div class="modal-content">
+        <button class="close-btn" onclick="closePreview()">&times;</button>
+        <div id="previewContent" class="w-full h-full"></div>
     </div>
 </div>
 
 <!-- Toast Notification -->
 <div id="toast" class="toast"></div>
 
+<!-- JavaScript -->
 <script>
-    const host = document.location.host
-    // -------------------------------
-    // UPLOAD & PREVIEW CODE (unchanged)
-    // -------------------------------
-    const plainText = [
-        "txt", "md", "csv", "log", "xml", "json", "yaml", "ini",
-        "conf", "tsv", "properties", "rst", "dat", "tex", "cpp", "h",
-        "cs", "js", "jsx", "ts", "tsx", "java", "py", "rb", "go",
-        "swift", "php", "html", "css", "scss", "less", "bash", "sh",
-        "zsh", "bat", "pl", "perl", "lua", "r", "sql", "json5", "yml",
-        "c", "cpp", "dart", "m", "rs", "v", "clj", "el", "kt", "coffee",
-        "vbs", "fs", "d", "as", "groovy", "hbs", "mustache"
-    ];
+    const host = document.location.host;
+    const plainText = ["txt", "md", "csv", "log", "xml", "json", "yaml", "ini", "conf", "tsv", "properties", "rst", "dat", "tex", "cpp", "h", "cs", "js", "jsx", "ts", "tsx", "java", "py", "rb", "go", "swift", "php", "html", "css", "scss", "less", "bash", "sh", "zsh", "bat", "pl", "perl", "lua", "r", "sql", "json5", "yml", "c", "cpp", "dart", "m", "rs", "v", "clj", "el", "kt", "coffee", "vbs", "fs", "d", "as", "groovy", "hbs", "mustache"];
+
     document.getElementById('uploadForm').addEventListener('submit', function(event) {
         const input = document.getElementById('fileInput');
         const fullPathsInput = document.getElementById('fullPathsInput');
-        if (input.files.length === 0) {
+        if (!input.files.length) {
             event.preventDefault();
             alert("Please select files or a folder.");
             return;
         }
-        const paths = [];
-        for (let file of input.files) {
-            paths.push(file.webkitRelativePath);
-        }
-        fullPathsInput.value = JSON.stringify(paths);
-        console.log(fullPathsInput.value);
+        fullPathsInput.value = JSON.stringify(Array.from(input.files).map(file => file.webkitRelativePath));
     });
+
     document.addEventListener("DOMContentLoaded", function() {
-        const viewerImages = document.querySelectorAll('.viewer-image');
-        viewerImages.forEach(image => new Viewer(image, { inline: false }));
+        document.querySelectorAll('.viewer-image').forEach(image => new Viewer(image, { inline: false }));
         populateGlobalFileTypes();
         document.getElementById('globalFilter').addEventListener('input', applyGlobalFilter);
         document.getElementById('globalTypeFilter').addEventListener('change', applyGlobalFilter);
@@ -360,13 +322,8 @@
     async function fetchFile(url, asArrayBuffer = false) {
         try {
             const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            if (asArrayBuffer) {
-                return await response.arrayBuffer();
-            }
-            return await response.blob();
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            return asArrayBuffer ? await response.arrayBuffer() : await response.blob();
         } catch (error) {
             console.error('Error fetching file:', error);
         }
@@ -375,69 +332,43 @@
     function previewFile(base, file) {
         const ext = file.split('.').pop().toLowerCase();
         let url = '/get?base=' + base + '&file=' + encodeURIComponent(file);
-        let content = '';
         if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
-            content = `<img src="${url}" class="w-full h-auto rounded" />`;
-            showPreview(content);
+            showPreview(`<img src="${url}" class="w-full h-auto rounded" />`);
         } else if (plainText.includes(ext)) {
-            const el = document.getElementById("previewContent")
-            el.innerText = ""
             fetch(url)
                 .then(response => response.text())
-                .then(text => {
-                    content = `<pre style="height: calc(100vh - 170px)" class="p-4 bg-gray-800 text-white overflow-x-auto rounded-lg font-mono text-sm">${text}</pre>`;
-                    showPreview(content);
-                })
-                .catch(error => {
-                    showPreview("Error loading file.");
-                });
+                .then(text => showPreview(`<pre class="p-4 bg-gray-800 text-white overflow-x-auto rounded font-mono text-sm" style="min-height: 60vh;">${text}</pre>`))
+                .catch(() => showPreview("Error loading file."));
         } else if (['mp4', 'webm'].includes(ext)) {
-            url += "&embed=true"
-            content = `<video controls class="w-full rounded" id="videoPreview"><source src="${url}" type="video/${ext}">Your browser does not support the video tag.</video>`;
-            showPreview(content);
+            url += "&embed=true";
+            showPreview(`<video controls class="w-full rounded" id="videoPreview"><source src="${url}" type="video/${ext}">Your browser does not support the video tag.</video>`);
         } else if (['mp3', 'wav'].includes(ext)) {
-            url += "&embed=true"
-            content = `<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`;
-            showPreview(content);
+            url += "&embed=true";
+            showPreview(`<audio controls class="w-full rounded" id="audioPreview"><source src="${url}" type="audio/${ext}">Your browser does not support the audio element.</audio>`);
         } else if (['docx'].includes(ext)) {
-            url += "&embed=true"
-            const previewContent = document.getElementById('previewContent');
-            previewContent.innerHTML = "";
-            (async () => {
-                url = "http://" + host + url
-                const blob = await fetchFile(url);
-                // synchronously rendering function
+            url += "&embed=true";
+            fetchFile("http://" + host + url).then(blob => {
                 docx.renderSync(blob, document.getElementById("previewContent"))
-                    .then(wordDocument => {
-                        const modal = document.getElementById('previewModal');
-                        modal.classList.remove('hidden');
-                        console.log("docx document object", wordDocument);
-                    });
-            })();
+                    .then(() => document.getElementById('previewModal').classList.remove('hidden'));
+            });
         } else if (['xlsx'].includes(ext)) {
-            url += "&embed=true"
-            const previewContent = document.getElementById('previewContent');
-            previewContent.innerHTML = "";
-            (async () => {
-                url = "http://" + host + url
-                const blob = await fetchFile(url, true);
+            url += "&embed=true";
+            fetchFile("http://" + host + url, true).then(blob => {
                 const grid = x_spreadsheet(document.getElementById("previewContent"));
                 grid.loadData(stox(XLSX.read(blob)));
-                const modal = document.getElementById('previewModal');
-                modal.classList.remove('hidden');
-            })();
+                document.getElementById('previewModal').classList.remove('hidden');
+            });
         } else {
-            url = "http://" + host + url+"&embed=true"
-            content = `<iframe src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded" />`;
-            showPreview(content);
+            url = "http://" + host + url + "&embed=true";
+            showPreview(`<iframe src="http://0.0.0.0:8081/#${url}" class="w-full h-full rounded"></iframe>`);
         }
     }
+
     function showPreview(content) {
-        const modal = document.getElementById('previewModal');
-        const previewContent = document.getElementById('previewContent');
-        previewContent.innerHTML = content;
-        modal.classList.remove('hidden');
+        document.getElementById('previewContent').innerHTML = content;
+        document.getElementById('previewModal').classList.remove('hidden');
     }
+
     function closePreview() {
         const video = document.getElementById('videoPreview');
         if (video) { video.pause(); video.currentTime = 0; }
@@ -445,20 +376,22 @@
         if (audio) { audio.pause(); audio.currentTime = 0; }
         document.getElementById('previewModal').classList.add('hidden');
     }
+
     function showToast(message) {
         const toast = document.getElementById('toast');
         toast.textContent = message;
         toast.classList.add('show');
-        setTimeout(() => { toast.classList.remove('show'); }, 3000);
+        setTimeout(() => toast.classList.remove('show'), 3000);
     }
+
     function confirmDelete(type) {
-        const confirmMsg = `Are you sure you want to delete this ${type}? This action cannot be undone.`;
-        if (confirm(confirmMsg)) {
+        if (confirm(`Are you sure you want to delete this ${type}? This action cannot be undone.`)) {
             showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully.`);
             return true;
         }
         return false;
     }
+
     function confirmRename(form) {
         if (confirm("Are you sure you want to rename this item?")) {
             showToast("Item renamed successfully.");
@@ -467,98 +400,56 @@
         return false;
     }
 
-    // -------------------------------
-    // GLOBAL FILTER FUNCTIONALITY
-    // -------------------------------
     function applyGlobalFilter() {
-        const globalFilterValue = document.getElementById('globalFilter').value.toLowerCase();
-        const globalTypeFilterValue = document.getElementById('globalTypeFilter').value.toLowerCase();
-
-        // Filter Directories (no file type)
-        const directories = document.querySelectorAll('#directoriesContainer .brick');
-        directories.forEach(brick => {
-            const name = brick.getAttribute('data-name').toLowerCase();
-            brick.style.display = name.includes(globalFilterValue) ? "" : "none";
+        const filterVal = document.getElementById('globalFilter').value.toLowerCase();
+        const typeFilter = document.getElementById('globalTypeFilter').value.toLowerCase();
+        document.querySelectorAll('#directoriesContainer .brick').forEach(brick => {
+            brick.style.display = brick.getAttribute('data-name').toLowerCase().includes(filterVal) ? "" : "none";
         });
-
-        // Filter Images
-        const images = document.querySelectorAll('#imagesContainer .brick');
-        images.forEach(brick => {
+        document.querySelectorAll('#imagesContainer .brick, #filesContainer .brick').forEach(brick => {
             const name = brick.getAttribute('data-name').toLowerCase();
             const type = brick.getAttribute('data-type').toLowerCase();
-            let show = name.includes(globalFilterValue);
-            if (globalTypeFilterValue !== "") {
-                show = show && (type === globalTypeFilterValue);
-            }
-            brick.style.display = show ? "" : "none";
-        });
-
-        // Filter Files
-        const files = document.querySelectorAll('#filesContainer .brick');
-        files.forEach(brick => {
-            const name = brick.getAttribute('data-name').toLowerCase();
-            const type = brick.getAttribute('data-type').toLowerCase();
-            let show = name.includes(globalFilterValue);
-            if (globalTypeFilterValue !== "") {
-                show = show && (type === globalTypeFilterValue);
-            }
+            let show = name.includes(filterVal);
+            if (typeFilter) show = show && (type === typeFilter);
             brick.style.display = show ? "" : "none";
         });
     }
 
     function populateGlobalFileTypes() {
-        const typesSet = new Set();
-        const bricks = document.querySelectorAll('#imagesContainer .brick, #filesContainer .brick');
-        bricks.forEach(brick => {
+        const types = new Set();
+        document.querySelectorAll('#imagesContainer .brick, #filesContainer .brick').forEach(brick => {
             const type = brick.getAttribute('data-type');
-            if (type) {
-                typesSet.add(type.toLowerCase());
-            }
+            if (type) types.add(type.toLowerCase());
         });
-        const globalTypeFilter = document.getElementById('globalTypeFilter');
-        globalTypeFilter.innerHTML = '<option value="">All Types</option>';
-        typesSet.forEach(type => {
+        const select = document.getElementById('globalTypeFilter');
+        select.innerHTML = '<option value="">All Types</option>';
+        types.forEach(type => {
             const option = document.createElement('option');
             option.value = type;
             option.textContent = type.toUpperCase();
-            globalTypeFilter.appendChild(option);
+            select.appendChild(option);
         });
     }
 
-    // -------------------------------
-    // TABS NAVIGATION FUNCTIONS
-    // -------------------------------
     function showTab(tab) {
-        // Hide all tab contents
-        document.getElementById('tab-content-dirs').classList.add('hidden');
-        document.getElementById('tab-content-imgs').classList.add('hidden');
-        document.getElementById('tab-content-files').classList.add('hidden');
-        // Remove active/inactive classes from all tab buttons
-        document.getElementById('tab-btn-dirs').classList.remove('tab-active');
-        document.getElementById('tab-btn-dirs').classList.add('tab-inactive');
-        document.getElementById('tab-btn-imgs').classList.remove('tab-active');
-        document.getElementById('tab-btn-imgs').classList.add('tab-inactive');
-        document.getElementById('tab-btn-files').classList.remove('tab-active');
-        document.getElementById('tab-btn-files').classList.add('tab-inactive');
-        // Show the selected tab and update button style
-        if(tab === 'dirs') {
-            document.getElementById('tab-content-dirs').classList.remove('hidden');
-            document.getElementById('tab-btn-dirs').classList.remove('tab-inactive');
-            document.getElementById('tab-btn-dirs').classList.add('tab-active');
-        } else if(tab === 'imgs') {
-            document.getElementById('tab-content-imgs').classList.remove('hidden');
-            document.getElementById('tab-btn-imgs').classList.remove('tab-inactive');
-            document.getElementById('tab-btn-imgs').classList.add('tab-active');
-        } else if(tab === 'files') {
-            document.getElementById('tab-content-files').classList.remove('hidden');
-            document.getElementById('tab-btn-files').classList.remove('tab-inactive');
-            document.getElementById('tab-btn-files').classList.add('tab-active');
+        ['dirs', 'imgs', 'files'].forEach(t => {
+            const content = document.getElementById('tab-content-' + t);
+            if (content) content.classList.add('hidden');
+            const btn = document.getElementById('tab-btn-' + t);
+            if (btn) {
+                btn.classList.remove('tab-active');
+                btn.classList.add('tab-inactive');
+            }
+        });
+        const activeContent = document.getElementById('tab-content-' + tab);
+        if (activeContent) activeContent.classList.remove('hidden');
+        const activeBtn = document.getElementById('tab-btn-' + tab);
+        if (activeBtn) {
+            activeBtn.classList.remove('tab-inactive');
+            activeBtn.classList.add('tab-active');
         }
     }
 
-    // -------------------------------
-    // TEMPORARY LINK GENERATION FUNCTION
-    // -------------------------------
     function generateTempLinkFile(baseIndex, filePath) {
         let expiry = prompt("Enter expiry time (in minutes) for the temporary link:");
         if (!expiry || isNaN(expiry) || parseInt(expiry) <= 0) {
@@ -569,17 +460,10 @@
         formData.append("base", baseIndex);
         formData.append("file", filePath);
         formData.append("expiry", expiry);
-        fetch('/temporary', {
-            method: 'POST',
-            body: formData
-        })
+        fetch('/temporary', { method: 'POST', body: formData })
             .then(response => response.text())
-            .then(text => {
-                prompt("Temporary link (copy it):", text);
-            })
-            .catch(error => {
-                alert("Error generating temporary link: " + error);
-            });
+            .then(text => prompt("Temporary link (copy it):", text))
+            .catch(error => alert("Error generating temporary link: " + error));
     }
 </script>
 </body>

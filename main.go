@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"os"
 	"path/filepath"
@@ -242,7 +243,7 @@ func (m *Manager) viewDir(c *fiber.Ctx) error {
 		}
 	}
 	ctx := Context{
-		Title:     "Directory listing for " + filepath.Join(storage.BasePath(), dirParam),
+		Title:     "Directory listing",
 		BaseIndex: baseIndex,
 		BasePath:  storage.BasePath(),
 		Directory: dirParam,
@@ -634,6 +635,9 @@ func main() {
 		engine := html.New("./views", ".html")
 		engine.AddFuncMap(map[string]interface{}{
 			"lower": strings.ToLower,
+			"unescape": func(s string) template.HTML {
+				return template.HTML(s)
+			},
 			"split": func(s, sep string) []string {
 				parts := strings.Split(s, sep)
 				if len(parts) == 1 {
@@ -645,7 +649,8 @@ func main() {
 		})
 		engine.Reload(true)
 		app := fiber.New(fiber.Config{
-			Views: engine,
+			Views:     engine,
+			BodyLimit: 400 * 1024 * 1024,
 		})
 		static := fiber.New()
 		static.Use(cors.New())
