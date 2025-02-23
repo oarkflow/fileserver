@@ -97,18 +97,24 @@
 
 <!-- Action Bar -->
 <div class="action-bar bg-white shadow mb-6 px-4 py-4 flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
-    <form id="uploadForm" enctype="multipart/form-data" action="/upload" method="POST" class="flex items-center space-x-3">
+    <form id="uploadForm" class="flex flex-col items-start space-y-3">
         <input type="hidden" name="base" value="{{ .BaseIndex }}">
         <input type="hidden" name="directory" value="{{ .Directory }}">
-        <label for="fileInput" class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded">
-            Upload Files/Folder
-        </label>
-        <input type="file" id="fileInput" name="file-upload" multiple class="hidden">
-        <input type="hidden" id="fullPathsInput" name="full-paths[]" />
-        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded">
-            Submit
-        </button>
+        <input type="file" id="fileInput" name="file-upload" required>
+        <div id="uploadControls" class="mt-2 hidden">
+            <button type="button" id="pauseBtn" class="bg-yellow-500 text-white py-1 px-2 rounded">Pause</button>
+            <button type="button" id="resumeBtn" class="bg-green-500 text-white py-1 px-2 rounded hidden">Resume</button>
+            <button type="button" id="cancelBtn" class="bg-red-500 text-white py-1 px-2 rounded">Cancel</button>
+        </div>
+
+        <!-- Progress bar -->
+        <div id="uploadProgress" class="w-full bg-gray-200 rounded mt-2 px-2">
+            <div id="progressBar" class="bg-blue-500 text-xs leading-none py-1 text-center text-white" style="width: 0%;">0%</div>
+        </div>
+
+        <button type="button" id="startUpload" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded">Start Upload</button>
     </form>
+
     <form action="/mkdir" method="POST" class="flex items-center space-x-3">
         <input type="hidden" name="base" value="{{ .BaseIndex }}">
         <input type="hidden" name="directory" value="{{ .Directory }}">
@@ -164,8 +170,7 @@
     <!-- Tab Contents -->
     <!-- Directories Tab -->
     {{ if .Dirs }}
-    <section id="tab-content-dirs">
-        <h2 class="text-xl font-semibold mb-4">Directories</h2>
+    <section id="tab-content-dirs" class="px-4">
         <div id="directoriesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Dirs }}
             <div class="brick bg-white shadow rounded-lg p-4 hover:shadow-lg" data-name="{{ .Name }}">
@@ -205,8 +210,7 @@
 
     <!-- Images Tab -->
     {{ if .Images }}
-    <section id="tab-content-imgs" class="{{ if .Dirs }}hidden{{ end }}">
-        <h2 class="text-xl font-semibold mb-4">Images</h2>
+    <section id="tab-content-imgs" class="px-4 {{ if .Dirs }}hidden{{ end }}">
         <div id="imagesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Images }}
             <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
@@ -242,8 +246,7 @@
 
     <!-- Files Tab -->
     {{ if .Files }}
-    <section id="tab-content-files" class="{{ if or .Dirs .Images }}hidden{{ end }}">
-        <h2 class="text-xl font-semibold mb-4">Files</h2>
+    <section id="tab-content-files" class="px-4 {{ if or .Dirs .Images }}hidden{{ end }}">
         <div id="filesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {{ range .Files }}
             <div class="brick bg-white shadow rounded-lg p-4 relative hover:shadow" data-name="{{ .Name }}" data-type="{{ (lower (or (index (split .Name ".") 1) "")) }}">
@@ -300,6 +303,143 @@
 <script>
     const host = document.location.host;
     const plainText = ["txt", "md", "csv", "log", "xml", "json", "yaml", "ini", "conf", "tsv", "properties", "rst", "dat", "tex", "cpp", "h", "cs", "js", "jsx", "ts", "tsx", "java", "py", "rb", "go", "swift", "php", "html", "css", "scss", "less", "bash", "sh", "zsh", "bat", "pl", "perl", "lua", "r", "sql", "json5", "yml", "c", "cpp", "dart", "m", "rs", "v", "clj", "el", "kt", "coffee", "vbs", "fs", "d", "as", "groovy", "hbs", "mustache"];
+
+    const chunkSize = 1024 * 1024; // 1 MB per chunk
+    let uploadPaused = false;
+    let currentFile;
+    let currentOffset = 0;
+    let uploadId = null;
+    let xhr = null;
+
+    // Start the upload when user clicks the start button.
+    document.getElementById('startUpload').addEventListener('click', () => {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files.length) {
+            alert("Please select a file.");
+            return;
+        }
+        currentFile = fileInput.files[0];
+        currentOffset = 0;
+        initUpload();
+    });
+
+    // Pause button
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+        uploadPaused = true;
+        document.getElementById('pauseBtn').classList.add('hidden');
+        document.getElementById('resumeBtn').classList.remove('hidden');
+        if (xhr) xhr.abort();
+    });
+
+    // Resume button
+    document.getElementById('resumeBtn').addEventListener('click', () => {
+        uploadPaused = false;
+        document.getElementById('resumeBtn').classList.add('hidden');
+        document.getElementById('pauseBtn').classList.remove('hidden');
+        uploadChunk();
+    });
+
+    // Cancel button
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+        if (uploadId) {
+            fetch('/upload/cancel', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({uploadId})
+            });
+        }
+        resetUpload();
+    });
+
+    // Initialize the upload session.
+    function initUpload() {
+        const formData = new URLSearchParams();
+        const base = document.querySelector('input[name="base"]').value;
+        const directory = document.querySelector('input[name="directory"]').value;
+        formData.append('base', base);
+        formData.append('directory', directory);
+        formData.append('filename', currentFile.name);
+        formData.append('totalBytes', currentFile.size);
+        fetch('/upload/init', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: formData.toString()
+        }).then(response => response.json())
+            .then(data => {
+                uploadId = data.uploadId;
+                document.getElementById('uploadControls').classList.remove('hidden');
+                uploadChunk();
+            }).catch(err => {
+            alert("Upload initialization failed.");
+            console.error(err);
+        });
+    }
+
+    // Upload one chunk.
+    function uploadChunk() {
+        if (uploadPaused) return;
+        if (currentOffset >= currentFile.size) {
+            finishUpload();
+            return;
+        }
+        const chunk = currentFile.slice(currentOffset, currentOffset + chunkSize);
+        xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload/chunk', true);
+        xhr.upload.onprogress = function(event) {
+            if (event.lengthComputable) {
+                const progress = ((currentOffset + event.loaded) / currentFile.size) * 100;
+                updateProgress(progress);
+            }
+        };
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                const response = JSON.parse(xhr.responseText);
+                currentOffset += chunk.size;
+                updateProgress((currentOffset / currentFile.size) * 100);
+                uploadChunk();
+            } else {
+                console.error("Chunk upload failed:", xhr.responseText);
+            }
+        };
+        xhr.onerror = function() {
+            console.error("Chunk upload error");
+        };
+        const formData = new FormData();
+        formData.append('uploadId', uploadId);
+        formData.append('chunk', chunk);
+        xhr.send(formData);
+    }
+
+    // Finish the upload session.
+    function finishUpload() {
+        fetch('/upload/finish', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({uploadId}).toString()
+        }).then(response => response.json())
+            .then(data => {
+                alert("Upload completed");
+                document.location.reload()
+            });
+    }
+
+    // Update the progress bar.
+    function updateProgress(percent) {
+        const progressBar = document.getElementById('progressBar');
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = Math.floor(percent) + '%';
+    }
+
+    // Reset the UI for a new upload.
+    function resetUpload() {
+        uploadId = null;
+        currentOffset = 0;
+        uploadPaused = false;
+        document.getElementById('pauseBtn').classList.remove('hidden');
+        document.getElementById('resumeBtn').classList.add('hidden');
+        document.getElementById('uploadControls').classList.add('hidden');
+        updateProgress(0);
+    }
 
     document.getElementById('uploadForm').addEventListener('submit', function(event) {
         const input = document.getElementById('fileInput');

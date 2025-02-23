@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -134,6 +135,14 @@ type Manager struct {
 	users     map[string]*User
 	tempLinks map[string]TemporaryLink
 	storages  []StorageItem
+	uploads   map[string]*UploadSession // new map to track uploads
+}
+
+type UploadSession struct {
+	FilePath      string
+	File          *os.File
+	ReceivedBytes int64
+	TotalBytes    int64
 }
 
 func (m *Manager) getAllFiles(fs filesystem.Storage, dir string) (AllFiles, error) {
@@ -467,6 +476,11 @@ func (m *Manager) viewPermissions(c *fiber.Ctx) error {
 	if user.Role != "admin" {
 		return c.Status(fiber.StatusForbidden).SendString("Only admin can view permissions")
 	}
+	baseIndex, err := strconv.Atoi(c.FormValue("base"))
+	if err != nil || baseIndex < 0 || baseIndex >= len(m.storages) {
+		return c.Redirect("/")
+	}
+	storage := m.storages[baseIndex]
 	path := c.Query("path")
 	var aclEntry map[string][]string
 	if path != "" {
@@ -475,6 +489,8 @@ func (m *Manager) viewPermissions(c *fiber.Ctx) error {
 	return c.Render("permissions", fiber.Map{
 		"Title":       "Permissions Management",
 		"Path":        path,
+		"BasePath":    storage.Storage.BasePath(),
+		"BaseIndex":   baseIndex,
 		"Permissions": aclEntry,
 	})
 }
@@ -601,6 +617,112 @@ func (m *Manager) addStorage(c *fiber.Ctx) error {
 	return c.Redirect("/")
 }
 
+// /upload/init: Create a new upload session.
+func (m *Manager) uploadInit(c *fiber.Ctx) error {
+	user := c.Locals("user").(*User)
+	baseIndexStr := c.FormValue("base")
+	baseIndex, err := strconv.Atoi(baseIndexStr)
+	if err != nil || baseIndex < 0 || baseIndex >= len(m.storages) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid storage base"})
+	}
+	directory := c.FormValue("directory", "")
+	filename := c.FormValue("filename")
+	totalStr := c.FormValue("totalBytes")
+	totalBytes, _ := strconv.ParseInt(totalStr, 10, 64)
+
+	if filename == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Filename required"})
+	}
+	fullPath := filepath.Join(directory, filename)
+	if !m.checkPermission(user, directory, "upload") {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Permission denied"})
+	}
+
+	// Compute absolute file path using storage configuration.
+	absPath := filepath.Join(m.storages[baseIndex].Config.Path, fullPath)
+	// Create (or overwrite) the target file.
+	f, err := os.Create(absPath)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create file"})
+	}
+
+	uploadId, err := utils.GenerateToken(16)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate upload ID"})
+	}
+	session := &UploadSession{
+		FilePath:      absPath,
+		File:          f,
+		ReceivedBytes: 0,
+		TotalBytes:    totalBytes,
+	}
+	m.uploads[uploadId] = session
+	return c.JSON(fiber.Map{"uploadId": uploadId})
+}
+
+// /upload/chunk: Append a file chunk to the upload session.
+func (m *Manager) uploadChunk(c *fiber.Ctx) error {
+	uploadId := c.FormValue("uploadId")
+	if uploadId == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing uploadId"})
+	}
+	session, ok := m.uploads[uploadId]
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid upload session"})
+	}
+
+	// The client sends the chunk as part of the multipart form.
+	fileHeader, err := c.FormFile("chunk")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing file chunk"})
+	}
+	chunkFile, err := fileHeader.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Unable to open chunk"})
+	}
+	defer chunkFile.Close()
+
+	// Copy the chunk data to the file.
+	n, err := io.Copy(session.File, chunkFile)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to write chunk"})
+	}
+	session.ReceivedBytes += n
+	progress := float64(session.ReceivedBytes) / float64(session.TotalBytes) * 100
+	return c.JSON(fiber.Map{"received": session.ReceivedBytes, "progress": progress})
+}
+
+// /upload/finish: Close the upload session.
+func (m *Manager) uploadFinish(c *fiber.Ctx) error {
+	uploadId := c.FormValue("uploadId")
+	if uploadId == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing uploadId"})
+	}
+	session, ok := m.uploads[uploadId]
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid upload session"})
+	}
+	session.File.Close()
+	delete(m.uploads, uploadId)
+	return c.JSON(fiber.Map{"status": "completed"})
+}
+
+// /upload/cancel: Abort an upload session.
+func (m *Manager) uploadCancel(c *fiber.Ctx) error {
+	uploadId := c.FormValue("uploadId")
+	if uploadId == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing uploadId"})
+	}
+	session, ok := m.uploads[uploadId]
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid upload session"})
+	}
+	session.File.Close()
+	os.Remove(session.FilePath)
+	delete(m.uploads, uploadId)
+	return c.JSON(fiber.Map{"status": "cancelled"})
+}
+
 func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Get("/login", auth.loginPage)
 	app.Post("/login", auth.loginPost)
@@ -610,6 +732,10 @@ func (m *Manager) SetupRoutes(app *fiber.App, auth *AuthManager) {
 	app.Get("/view", m.viewDir)
 	app.Get("/get", m.getFile)
 	app.Post("/upload", m.uploadFiles)
+	app.Post("/upload/init", m.uploadInit)
+	app.Post("/upload/chunk", m.uploadChunk)
+	app.Post("/upload/finish", m.uploadFinish)
+	app.Post("/upload/cancel", m.uploadCancel)
 	app.Post("/delete", m.deleteFile)
 	app.Post("/rename", m.renameItem)
 	app.Post("/mkdir", m.makeDir)
@@ -710,6 +836,7 @@ func main() {
 			users:     make(map[string]*User),
 			tempLinks: make(map[string]TemporaryLink),
 			storages:  []StorageItem{},
+			uploads:   make(map[string]*UploadSession),
 		}
 
 		manager.users["admin"] = NewUser("admin", "admin", "admin")
