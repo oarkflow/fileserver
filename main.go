@@ -3,9 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/template/html/v2"
-	"github.com/urfave/cli/v2"
 	"html/template"
 	"io"
 	"log"
@@ -15,6 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/template/html/v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/gofiber/fiber/v2"
 	fiberSession "github.com/gofiber/fiber/v2/middleware/session"
@@ -205,6 +206,7 @@ type Context struct {
 	Images    []Image
 	Dirs      []Dir
 	User      string
+	ReadOnly  bool
 }
 
 type DashboardItem struct {
@@ -236,6 +238,8 @@ type TemporaryLink struct {
 	BaseIndex int
 	FilePath  string
 	Expiry    time.Time
+	DirPath   string
+	IsDir     bool
 }
 
 type Manager struct {
@@ -324,6 +328,11 @@ func (m *Manager) generateTemp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid storage base")
 	}
 	filePath := c.FormValue("file")
+	dirPath := c.FormValue("dir")
+	var isDir bool
+	if dirPath != "" {
+		isDir = true
+	}
 	expiryMinutesStr := c.FormValue("expiry")
 	expiryMinutes, err := strconv.Atoi(expiryMinutesStr)
 	if err != nil || expiryMinutes <= 0 {
@@ -341,6 +350,8 @@ func (m *Manager) generateTemp(c *fiber.Ctx) error {
 		Token:     token,
 		BaseIndex: baseIndex,
 		FilePath:  filePath,
+		DirPath:   dirPath,
+		IsDir:     isDir,
 		Expiry:    time.Now().Add(time.Duration(expiryMinutes) * time.Minute),
 	}
 	link := fmt.Sprintf("%s/temporary?token=%s", c.BaseURL(), token)
@@ -353,8 +364,33 @@ func (m *Manager) tempLinkAccess(c *fiber.Ctx) error {
 	if !exists || time.Now().After(link.Expiry) {
 		return c.Status(fiber.StatusNotFound).SendString("Temporary link expired or not found")
 	}
-	storage := m.storages[link.BaseIndex].Storage
-	content, contentType, err := storage.ReadFile(link.FilePath)
+	storage := m.storages[link.BaseIndex]
+	if link.IsDir {
+		allFiles, err := m.getAllFiles(storage.Storage, link.DirPath)
+		if err != nil {
+			return err
+		}
+		parent := ""
+		if link.DirPath != "" {
+			parent = filepath.Dir(link.DirPath)
+			if parent == "." {
+				parent = ""
+			}
+		}
+		ctx := Context{
+			Title:     "Directory listing",
+			BaseIndex: link.BaseIndex,
+			BasePath:  storage.Config.Path,
+			Directory: link.DirPath,
+			Parent:    parent,
+			Files:     allFiles.Files,
+			Dirs:      allFiles.Dirs,
+			Images:    allFiles.Images,
+			ReadOnly:  true,
+		}
+		return c.Render("index", ctx)
+	}
+	content, contentType, err := storage.Storage.ReadFile(link.FilePath)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).SendString("File not found")
 	}
@@ -385,7 +421,7 @@ func (m *Manager) viewDir(c *fiber.Ctx) error {
 	if err != nil || baseIndex < 0 || baseIndex >= len(m.storages) {
 		return c.Redirect("/")
 	}
-	dirParam := c.Query("dir", "")
+	dirParam := c.Query("dir")
 	if !m.checkPermission(user, dirParam, "view") {
 		return c.Status(fiber.StatusForbidden).SendString("Permission denied")
 	}

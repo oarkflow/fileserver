@@ -1,6 +1,12 @@
 [
-  {
-    "type": "local",
-    "path": "/Users/sujit/Sites/fileserver/uploads"
-  }
+	{
+		"type": "local",
+		"path": "/Users/sujit/Sites/fileserver/uploads",
+		"is_absolute": false
+	},
+	{
+		"type": "local",
+		"path": "/Users/sujit/Downloads",
+		"is_absolute": true
+	}
 ]
